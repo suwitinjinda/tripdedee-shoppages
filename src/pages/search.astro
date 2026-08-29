@@ -1,0 +1,165 @@
+---
+// SSR search results — /shop/search?q=&province=&shopType=
+// All filtering done server-side so the page works without JS and can be
+// indexed. Pagination uses ?offset=N.
+import DirectoryLayout from '../layouts/DirectoryLayout.astro';
+import ShopCard from '../components/ShopCard.astro';
+import SearchBar from '../components/SearchBar.astro';
+import { searchShops, getShopFacets } from '../lib/api.js';
+import { typeLabel } from '../lib/shopType.js';
+
+const q = String(Astro.url.searchParams.get('q') || '').slice(0, 100).trim();
+const province = String(Astro.url.searchParams.get('province') || '').slice(0, 50).trim();
+const shopType = String(Astro.url.searchParams.get('shopType') || '').slice(0, 50).trim();
+const offset = Math.max(0, parseInt(Astro.url.searchParams.get('offset') || '0', 10) || 0);
+const limit = 24;
+
+const [results, facets] = await Promise.all([
+  searchShops({ q, province, shopType, limit, offset }),
+  getShopFacets(),
+]);
+
+const pageBits = [];
+if (q) pageBits.push(`"${q}"`);
+if (shopType) pageBits.push(typeLabel({ shopType }, 'th'));
+if (province) pageBits.push(province);
+const heading = pageBits.length ? pageBits.join(' · ') : 'ทุกร้าน';
+
+const title = `ค้นหา: ${heading} | TripDeDee`;
+const description = `พบ ${results.total.toLocaleString()} ร้านสำหรับ ${heading}`;
+const baseQs = new URLSearchParams();
+if (q) baseQs.set('q', q);
+if (province) baseQs.set('province', province);
+if (shopType) baseQs.set('shopType', shopType);
+const canonicalQs = baseQs.toString();
+const canonical = `https://tripdedee.com/shop/search${canonicalQs ? '?' + canonicalQs : ''}`;
+
+const nextOffset = offset + limit;
+const prevOffset = Math.max(0, offset - limit);
+const hasNext = nextOffset < results.total;
+const hasPrev = offset > 0;
+const pageQs = (off) => {
+  const u = new URLSearchParams(baseQs);
+  if (off > 0) u.set('offset', String(off));
+  return u.toString();
+};
+---
+
+<DirectoryLayout
+  lang="th"
+  title={title}
+  description={description}
+  canonical={canonical}
+  searchQuery={q}
+  searchProvince={province}
+  searchType={shopType}
+  noindex={offset > 0}
+>
+  {/* Filters summary */}
+  <div class="mb-6 flex flex-wrap items-center gap-2">
+    <h1 class="mr-3 text-2xl font-extrabold text-gray-900">
+      {heading}
+    </h1>
+    <span class="text-sm text-gray-500">{results.total.toLocaleString()} ร้าน</span>
+
+    {(q || province || shopType) && (
+      <a
+        href="/shop/search"
+        class="ml-auto rounded-full border border-gray-200 px-3 py-1 text-xs font-medium text-gray-500 hover:border-orange-300 hover:text-orange-600"
+      >
+        ล้างตัวกรอง ×
+      </a>
+    )}
+  </div>
+
+  {/* Active filter chips · clickable to remove */}
+  {(q || province || shopType) && (
+    <div class="mb-4 flex flex-wrap gap-2">
+      {q && (
+        <a
+          href={`/shop/search?${new URLSearchParams({ ...(province && { province }), ...(shopType && { shopType }) }).toString()}`}
+          class="inline-flex items-center gap-1 rounded-full bg-orange-100 px-3 py-1 text-xs font-bold text-orange-700"
+        >
+          "{q}" ×
+        </a>
+      )}
+      {shopType && (
+        <a
+          href={`/shop/search?${new URLSearchParams({ ...(q && { q }), ...(province && { province }) }).toString()}`}
+          class="inline-flex items-center gap-1 rounded-full bg-orange-100 px-3 py-1 text-xs font-bold text-orange-700"
+        >
+          {typeLabel({ shopType }, 'th')} ×
+        </a>
+      )}
+      {province && (
+        <a
+          href={`/shop/search?${new URLSearchParams({ ...(q && { q }), ...(shopType && { shopType }) }).toString()}`}
+          class="inline-flex items-center gap-1 rounded-full bg-orange-100 px-3 py-1 text-xs font-bold text-orange-700"
+        >
+          {province} ×
+        </a>
+      )}
+    </div>
+  )}
+
+  {/* Province filter when not already filtered by province */}
+  {!province && facets.provinces.length > 0 && (
+    <div class="mb-6 -mx-1 flex gap-2 overflow-x-auto pb-2">
+      {facets.provinces.slice(0, 15).map((p) => {
+        const u = new URLSearchParams(baseQs);
+        u.set('province', p.province);
+        return (
+          <a
+            href={`/shop/search?${u.toString()}`}
+            class="shrink-0 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-600 hover:border-orange-300 hover:text-orange-700"
+          >
+            {p.province} <span class="text-gray-400">{p.count}</span>
+          </a>
+        );
+      })}
+    </div>
+  )}
+
+  {/* Results grid */}
+  {results.shops.length === 0 ? (
+    <div class="rounded-2xl border border-dashed border-gray-300 bg-white px-6 py-16 text-center">
+      <div class="text-5xl">🔍</div>
+      <p class="mt-3 text-base font-bold text-gray-700">ไม่พบร้านที่ตรงตามตัวกรอง</p>
+      <p class="mt-1 text-sm text-gray-500">ลองค้นหาด้วยคำอื่น หรือลบตัวกรองบางตัว</p>
+      <a href="/shop/" class="mt-4 inline-block rounded-lg bg-orange-500 px-5 py-2 text-sm font-bold text-white hover:bg-orange-600">
+        ดูร้านทั้งหมด
+      </a>
+    </div>
+  ) : (
+    <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+      {results.shops.map((shop) => <ShopCard shop={shop} lang="th" />)}
+    </div>
+  )}
+
+  {/* Pagination */}
+  {(hasNext || hasPrev) && (
+    <div class="mt-8 flex items-center justify-center gap-3">
+      {hasPrev ? (
+        <a
+          href={`/shop/search?${pageQs(prevOffset)}`}
+          class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-bold text-gray-700 hover:border-orange-300 hover:text-orange-700"
+          rel="prev"
+        >
+          ← ก่อนหน้า
+        </a>
+      ) : <span></span>}
+      <span class="text-sm text-gray-500">
+        {offset + 1}–{Math.min(offset + limit, results.total)} จาก {results.total.toLocaleString()}
+      </span>
+      {hasNext ? (
+        <a
+          href={`/shop/search?${pageQs(nextOffset)}`}
+          class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-bold text-gray-700 hover:border-orange-300 hover:text-orange-700"
+          rel="next"
+        >
+          ถัดไป →
+        </a>
+      ) : <span></span>}
+    </div>
+  )}
+</DirectoryLayout>

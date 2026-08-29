@@ -1,0 +1,17 @@
+---
+const { images = [], name } = Astro.props;
+// First image is used by the hero — show the rest here.
+const rest = Array.isArray(images) ? images.slice(1) : [];
+---
+
+{rest.length > 0 && (
+  <section class="px-5 py-4">
+    <div class="grid grid-cols-3 gap-2">
+      {rest.map((src, i) => (
+        <div class="aspect-square overflow-hidden rounded-lg bg-gray-100">
+          <img src={src} alt={`${name} ${i + 2}`} class="h-full w-full object-cover" loading="lazy" />
+        </div>
+      ))}
+    </div>
+  </section>
+)}

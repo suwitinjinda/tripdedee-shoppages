@@ -1,0 +1,30 @@
+---
+import { t } from '../lib/i18n.js';
+
+const { shop, lang } = Astro.props;
+const tr = t(lang);
+
+const hasRange = shop.openTime && shop.closeTime;
+const closed = Array.isArray(shop.closedDays) ? shop.closedDays : [];
+const closedNames = closed.map((d) => tr.days[d]).filter(Boolean);
+const freeText = shop.businessHours && shop.businessHours.trim();
+
+const show = hasRange || closedNames.length > 0 || freeText;
+---
+
+{show && (
+  <section class="border-t border-gray-100 px-5 py-5">
+    <h2 class="mb-2 text-lg font-bold text-gray-900">{tr.hours}</h2>
+    {hasRange && (
+      <p class="text-[15px] text-gray-700">
+        {shop.openTime} – {shop.closeTime}
+      </p>
+    )}
+    <p class="mt-1 text-sm text-gray-500">
+      {closedNames.length > 0 ? `${tr.closedDays}: ${closedNames.join(', ')}` : tr.everyday}
+    </p>
+    {freeText && !hasRange && (
+      <p class="mt-1 whitespace-pre-line text-[15px] text-gray-700">{freeText}</p>
+    )}
+  </section>
+)}

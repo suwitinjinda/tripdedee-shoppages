@@ -1,0 +1,712 @@
+---
+import ShopLayout from '../layouts/ShopLayout.astro';
+import { t, pick } from '../lib/i18n.js';
+import { hotelPath } from '../lib/slug.js';
+
+const { hotelId, lang, hotel, isPublic } = Astro.props;
+const tr = t(lang);
+
+const SITE = 'https://tripdedee.com';
+const thName = hotel?.name || hotelId;
+const enName = hotel?.nameEn || hotel?.name || hotelId;
+const canonical =
+  SITE + (lang === 'en' ? hotelPath('en', enName, hotelId) : hotelPath('th', thName, hotelId));
+const alternateUrl =
+  SITE + (lang === 'en' ? hotelPath('th', thName, hotelId) : hotelPath('en', enName, hotelId));
+const alternateLang = lang === 'en' ? 'th' : 'en';
+
+const CATEGORY_LABEL_TH = {
+  hotel: 'โรงแรม', resort: 'รีสอร์ท', boutique: 'โรงแรมบูติก',
+  apartment: 'อพาร์ทเมนต์', campsite: 'ลานกางเต็นท์', other: 'ที่พัก',
+};
+const CATEGORY_LABEL_EN = {
+  hotel: 'Hotel', resort: 'Resort', boutique: 'Boutique Hotel',
+  apartment: 'Apartment', campsite: 'Campsite', other: 'Property',
+};
+
+let view = null;
+if (isPublic) {
+  const cat = String(hotel.category || 'hotel').toLowerCase();
+  const tLabel = (lang === 'en' ? CATEGORY_LABEL_EN[cat] : CATEGORY_LABEL_TH[cat]) || CATEGORY_LABEL_TH.other;
+  const name = pick(hotel.name, hotel.nameEn, lang);
+  const description = pick(hotel.description, hotel.descriptionEn, lang);
+  const place = [hotel.district, hotel.province].filter(Boolean).join(', ');
+  const metaDesc =
+    (description && description.trim()) ||
+    `${name} — ${tLabel}${place ? (lang === 'en' ? ` in ${place}` : ` ${place}`) : ''}`;
+
+  const images = Array.isArray(hotel.images) ? hotel.images.filter(Boolean) : [];
+  // Append cache-buster to plain (unsigned) GCS URLs so Google's CDN refetches
+  // and includes the Content-Type header (was stripped from the first cached
+  // response when files uploaded without contentType metadata).
+  function bustCache(url) {
+    if (!url || typeof url !== 'string') return url;
+    if (url.includes('?')) return url; // signed URLs already unique
+    return `${url}?v=2`;
+  }
+  const ogImage = bustCache(images[0] || hotel.imageUrl) || undefined;
+
+  const lat = hotel.coordinates?.latitude ?? hotel.latitude;
+  const lng = hotel.coordinates?.longitude ?? hotel.longitude;
+
+  // Cheapest room → "from ฿X/night"
+  const rooms = Array.isArray(hotel.roomTypes) ? hotel.roomTypes : [];
+  const prices = rooms.map((r) => Number(r.priceFrom) || 0).filter((p) => p > 0);
+  const cheapest = prices.length ? Math.min(...prices) : null;
+
+  const phone = (hotel.tel || hotel.phone || '').toString().trim();
+  const tel = phone ? phone.replace(/[^\d+]/g, '') : null;
+  function fmtPhone(p) {
+    if (!p) return p;
+    const d = p.replace(/[^\d+]/g, '');
+    if (/^0[689]\d{8}$/.test(d)) return d.slice(0,3) + ' ' + d.slice(3,6) + ' ' + d.slice(6);
+    if (/^0[2-57]\d{7}$/.test(d)) return d.slice(0,2) + ' ' + d.slice(2,5) + ' ' + d.slice(5);
+    return p;
+  }
+  const phoneDisplay = fmtPhone(phone);
+
+  const mapUrl = lat != null && lng != null
+    ? `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`
+    : (hotel.address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(hotel.address)}` : null);
+
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': cat === 'campsite' ? 'Campground' : cat === 'apartment' ? 'Apartment' : (cat === 'resort' ? 'Resort' : 'Hotel'),
+    name,
+    description: metaDesc,
+    image: images.length ? images : undefined,
+    telephone: phone || undefined,
+    url: canonical,
+    address: {
+      '@type': 'PostalAddress',
+      streetAddress: hotel.address || undefined,
+      addressLocality: hotel.district || undefined,
+      addressRegion: hotel.province || undefined,
+      addressCountry: 'TH',
+    },
+    geo: lat != null && lng != null
+      ? { '@type': 'GeoCoordinates', latitude: lat, longitude: lng }
+      : undefined,
+    priceRange: cheapest ? `฿${cheapest.toLocaleString()}+` : undefined,
+    aggregateRating: hotel.totalReviews > 0
+      ? { '@type': 'AggregateRating', ratingValue: hotel.averageRating, reviewCount: hotel.totalReviews }
+      : undefined,
+  };
+
+  view = { name, description, tLabel, metaDesc, ogImage, images, lat, lng,
+    cheapest, rooms, phone, tel, phoneDisplay, mapUrl, jsonLd, cat };
+}
+---
+
+{!isPublic && (
+  <ShopLayout lang={lang} title={`${tr.hotelNotFound} | TripDeDee`} noindex>
+    <div class="px-5 py-20 text-center">
+      <h1 class="text-2xl font-bold text-gray-900">{tr.hotelNotFound}</h1>
+      <p class="mt-3 text-gray-500">{tr.hotelNotFoundBody}</p>
+      <a
+        href="/hotel/"
+        class="mt-6 inline-block rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white"
+      >{tr.backHome}</a>
+    </div>
+  </ShopLayout>
+)}
+
+{isPublic && view && (
+  <ShopLayout
+    lang={lang}
+    title={`${view.name} | ${view.tLabel} | TripDeDee`}
+    description={view.metaDesc}
+    ogImage={view.ogImage}
+    canonical={canonical}
+    alternateUrl={alternateUrl}
+    alternateLang={alternateLang}
+    jsonLd={view.jsonLd}
+  >
+    {/* Hero */}
+    <header>
+      {view.ogImage ? (
+        <div class="aspect-[16/10] w-full overflow-hidden bg-gray-100">
+          <img src={view.ogImage} alt={view.name} class="h-full w-full object-cover" loading="eager" />
+        </div>
+      ) : (
+        <div class="aspect-[16/10] w-full bg-blue-600"></div>
+      )}
+      <div class="px-5 pt-5 pb-2">
+        <p class="text-sm font-medium text-blue-700">{view.tLabel}</p>
+        <h1 class="mt-1 text-2xl font-bold leading-tight text-gray-900">{view.name}</h1>
+        <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-600">
+          {hotel.averageRating > 0 && (
+            <span class="font-medium text-gray-900">
+              ★ {Number(hotel.averageRating).toFixed(1)}
+              {hotel.totalReviews > 0 ? <span class="font-normal text-gray-500"> ({hotel.totalReviews} {tr.reviews})</span> : null}
+            </span>
+          )}
+          {(hotel.district || hotel.province) && (
+            <span>{[hotel.district, hotel.province].filter(Boolean).join(', ')}</span>
+          )}
+        </div>
+        {view.cheapest && (
+          <div class="mt-3 inline-flex items-baseline gap-1 rounded-full bg-blue-50 px-3 py-1.5">
+            <span class="text-xs font-medium text-blue-700">{tr.roomFrom}</span>
+            <span class="text-lg font-bold text-blue-700">฿{view.cheapest.toLocaleString()}</span>
+            <span class="text-xs text-blue-600">{tr.perNight}</span>
+          </div>
+        )}
+      </div>
+    </header>
+
+    {/* Photo gallery (additional images beyond the hero) */}
+    {view.images.length > 1 && (
+      <section class="border-t border-gray-100 px-5 py-5">
+        <div class="grid grid-cols-3 gap-2">
+          {view.images.slice(1, 7).map((img) => (
+            <div class="aspect-square overflow-hidden rounded-lg bg-gray-100">
+              <img src={img} alt={view.name} class="h-full w-full object-cover" loading="lazy" />
+            </div>
+          ))}
+        </div>
+      </section>
+    )}
+
+    {/* About */}
+    {view.description && (
+      <section class="border-t border-gray-100 px-5 py-5">
+        <h2 class="mb-2 text-lg font-bold text-gray-900">{tr.aboutHotel}</h2>
+        <p class="whitespace-pre-line text-[15px] leading-relaxed text-gray-700">{view.description}</p>
+      </section>
+    )}
+
+    {/* Check-in/out */}
+    {(hotel.checkInTime || hotel.checkOutTime) && (
+      <section class="border-t border-gray-100 px-5 py-5">
+        <h2 class="mb-3 text-lg font-bold text-gray-900">{tr.hours}</h2>
+        <div class="grid grid-cols-2 gap-3">
+          {hotel.checkInTime && (
+            <div class="rounded-xl bg-gray-50 px-4 py-3">
+              <div class="text-xs font-medium uppercase text-gray-500">{tr.checkIn}</div>
+              <div class="mt-1 text-lg font-bold text-gray-900">{hotel.checkInTime}</div>
+            </div>
+          )}
+          {hotel.checkOutTime && (
+            <div class="rounded-xl bg-gray-50 px-4 py-3">
+              <div class="text-xs font-medium uppercase text-gray-500">{tr.checkOut}</div>
+              <div class="mt-1 text-lg font-bold text-gray-900">{hotel.checkOutTime}</div>
+            </div>
+          )}
+        </div>
+      </section>
+    )}
+
+    {/* Room types */}
+    {view.rooms.length > 0 && (
+      <section class="border-t border-gray-100 px-5 py-5">
+        <h2 class="mb-3 text-lg font-bold text-gray-900">{tr.rooms}</h2>
+        <ul class="flex flex-col gap-3">
+          {view.rooms.map((rt, idx) => {
+            const price = Number(rt.priceFrom) || 0;
+            const qty = Number(rt.quantity) || 1;
+            const cover = Array.isArray(rt.images) && rt.images.length ? rt.images[0] : null;
+            return (
+              <li class="overflow-hidden rounded-xl border border-gray-100 bg-white">
+                {cover && (
+                  <div class="aspect-[16/9] w-full overflow-hidden bg-gray-100">
+                    <img src={cover} alt={rt.name || tr.rooms} class="h-full w-full object-cover" loading="lazy" />
+                  </div>
+                )}
+                <div class="p-4">
+                  <div class="flex items-start justify-between gap-3">
+                    <div class="min-w-0">
+                      <h3 class="text-base font-semibold text-gray-900">{rt.name || tr.rooms}</h3>
+                      {rt.description && (
+                        <p class="mt-1 line-clamp-2 text-sm text-gray-600">{rt.description}</p>
+                      )}
+                      <div class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-500">
+                        {rt.maxGuests > 0 && (
+                          <span>👥 {tr.maxGuests} {rt.maxGuests} {tr.guests}</span>
+                        )}
+                        {qty > 0 && (
+                          <span>🛏 {qty} {tr.unitsAvailable}</span>
+                        )}
+                      </div>
+                    </div>
+                    {price > 0 && (
+                      <div class="flex flex-shrink-0 flex-col items-end">
+                        <span class="text-xs text-gray-500">{tr.roomFrom}</span>
+                        <span class="text-lg font-bold text-blue-700">฿{price.toLocaleString()}</span>
+                        <span class="text-xs text-gray-500">{tr.perNight}</span>
+                      </div>
+                    )}
+                  </div>
+                  {/* Book button — only when hotel accepts in-app/web bookings.
+                      Otherwise the backend POST /hotels/:id/bookings rejects with
+                      "This hotel does not accept in-app bookings", so the button
+                      is hidden to avoid a dead-end. */}
+                  {hotel.bookingType === 'in_app' && price > 0 && qty > 0 && (
+                    <button
+                      class="hotel-book-btn mt-3 w-full rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 active:scale-95 transition-transform"
+                      data-hotel-id={hotelId}
+                      data-room-index={idx}
+                      data-room-name={rt.name || tr.rooms}
+                      data-room-price={price}
+                      data-room-qty={qty}
+                      data-room-max-guests={rt.maxGuests || 2}
+                      data-lang={lang}
+                    >📅 {tr.bookRoom}</button>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+        {hotel.bookingType !== 'in_app' && view.phone && (
+          <p class="mt-3 text-center text-xs text-gray-500">
+            💬 {tr.contactOnly}
+          </p>
+        )}
+      </section>
+    )}
+
+    {/* ── Hotel Booking Modal (web guest booking) ───────────── */}
+    {hotel.bookingType === 'in_app' && (
+      <dialog id="hotel-booking-dialog" class="w-full max-w-sm rounded-2xl p-0 shadow-2xl backdrop:bg-black/50">
+        <div class="p-5">
+          <div class="mb-4 flex items-start justify-between">
+            <div class="min-w-0">
+              <h3 class="text-base font-bold text-gray-900" id="hb-title">{tr.bookRoom}</h3>
+              <p class="text-sm text-gray-500 truncate" id="hb-subtitle"></p>
+            </div>
+            <button id="hb-close" class="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+          </div>
+
+          {/* Step 1: Dates + guests */}
+          <div id="hb-step1">
+            <label class="block text-sm font-medium text-gray-700 mb-1">{tr.selectDates}</label>
+            <div class="grid grid-cols-2 gap-2 mb-3">
+              <div>
+                <div class="text-xs text-gray-500 mb-0.5">{tr.checkIn}</div>
+                <input type="date" id="hb-checkin"
+                  class="w-full rounded-xl border border-gray-300 px-2.5 py-2 text-sm focus:border-blue-400 focus:outline-none" />
+              </div>
+              <div>
+                <div class="text-xs text-gray-500 mb-0.5">{tr.checkOut}</div>
+                <input type="date" id="hb-checkout"
+                  class="w-full rounded-xl border border-gray-300 px-2.5 py-2 text-sm focus:border-blue-400 focus:outline-none" />
+              </div>
+            </div>
+            <div class="grid grid-cols-3 gap-2 mb-3">
+              <div>
+                <div class="text-xs text-gray-500 mb-0.5">{tr.numAdults}</div>
+                <input type="number" id="hb-adults" min="1" max="20" value="2"
+                  class="w-full rounded-xl border border-gray-300 px-2.5 py-2 text-sm focus:border-blue-400 focus:outline-none" />
+              </div>
+              <div>
+                <div class="text-xs text-gray-500 mb-0.5">{tr.numChildren}</div>
+                <input type="number" id="hb-children" min="0" max="20" value="0"
+                  class="w-full rounded-xl border border-gray-300 px-2.5 py-2 text-sm focus:border-blue-400 focus:outline-none" />
+              </div>
+              <div>
+                <div class="text-xs text-gray-500 mb-0.5">{tr.numRooms}</div>
+                <input type="number" id="hb-rooms" min="1" max="10" value="1"
+                  class="w-full rounded-xl border border-gray-300 px-2.5 py-2 text-sm focus:border-blue-400 focus:outline-none" />
+              </div>
+            </div>
+            <p id="hb-step1-err" class="hidden mb-2 text-xs text-red-500"></p>
+            <button id="hb-next1"
+              class="w-full rounded-xl bg-blue-600 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-40">
+              {tr.next}
+            </button>
+          </div>
+
+          {/* Step 2: Availability summary */}
+          <div id="hb-step2" class="hidden">
+            <div class="mb-3 flex items-center justify-between">
+              <span class="text-sm font-medium text-gray-700">{tr.confirmBooking}</span>
+              <button id="hb-back2" class="text-xs text-blue-600">{tr.back}</button>
+            </div>
+            <div id="hb-availability-loading" class="text-center text-sm text-gray-400 py-6">
+              {tr.sending}
+            </div>
+            <div id="hb-availability-result" class="hidden">
+              <div id="hb-summary" class="mb-3 rounded-xl bg-blue-50 px-3 py-2.5 text-sm text-blue-900"></div>
+              <input id="hb-name" type="text" placeholder={tr.nameRequired}
+                class="mb-2 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none" />
+              <input id="hb-phone" type="tel" placeholder={tr.phoneRequired}
+                class="mb-2 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none" />
+              <input id="hb-email" type="email" required placeholder={lang === 'en' ? 'Email * (for confirmation)' : 'อีเมล * (สำหรับยืนยันการจอง)'}
+                class="mb-2 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none" />
+              <input id="hb-notes" type="text" placeholder={tr.notesOpt}
+                class="mb-3 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none" />
+              <p id="hb-err" class="hidden mb-2 text-xs text-red-500"></p>
+              <button id="hb-submit"
+                class="w-full rounded-xl bg-blue-600 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-40">
+                {tr.confirmBooking}
+              </button>
+            </div>
+            <div id="hb-availability-empty" class="hidden text-center py-6">
+              <div class="text-3xl mb-2">😔</div>
+              <p id="hb-empty-msg" class="text-sm text-gray-600">{tr.fullyBooked}</p>
+              <button id="hb-empty-back"
+                class="mt-4 inline-block rounded-xl bg-gray-100 px-4 py-2 text-xs font-semibold text-gray-700">
+                {tr.back}
+              </button>
+            </div>
+          </div>
+
+          {/* Step 3: Success */}
+          <div id="hb-step3" class="hidden text-center py-4">
+            <div class="text-4xl mb-3">✅</div>
+            <p class="font-bold text-gray-900 text-base">{tr.bookingSuccess}</p>
+            <p id="hb-confirm-code" class="mt-2 text-lg font-bold text-blue-700"></p>
+            <p id="hb-confirm-detail" class="mt-1 text-sm text-gray-600"></p>
+            {/* Bank transfer info — only shown for pay_full hotels with bank
+                details set. Mirrors the Alert that the mobile HotelBookingScreen
+                shows after a successful booking. */}
+            <div id="hb-pay-info" class="hidden mt-3 rounded-xl bg-amber-50 border border-amber-200 px-3 py-2.5 text-left text-xs text-amber-900">
+              <div class="font-semibold mb-1">
+                {lang === 'en' ? '💰 Transfer to:' : '💰 โอนเงินเข้าบัญชี:'}
+              </div>
+              <div id="hb-pay-bank"></div>
+              <div id="hb-pay-account"></div>
+              <div id="hb-pay-number" class="font-mono"></div>
+            </div>
+            <p class="mt-3 text-xs text-gray-400">{tr.bookingPending}</p>
+            <button id="hb-done" class="mt-4 w-full rounded-xl bg-gray-100 py-2.5 text-sm font-semibold text-gray-700">
+              {lang === 'en' ? 'Close' : 'ปิด'}
+            </button>
+          </div>
+        </div>
+      </dialog>
+    )}
+
+    <script define:vars={{
+      hotelLang: lang,
+      payInfo: hotel.paymentType === 'pay_full' && hotel.paymentAccountName && hotel.paymentBankName && hotel.paymentAccountNumber
+        ? {
+            type: 'pay_full',
+            bankName: hotel.paymentBankName,
+            accountName: hotel.paymentAccountName,
+            accountNumber: hotel.paymentAccountNumber,
+          }
+        : { type: 'pay_at_property' },
+    }}>
+      (function () {
+        const dlg = document.getElementById('hotel-booking-dialog');
+        if (!dlg) return;
+        const API = 'https://tripdedee.com/api';
+        const isEn = hotelLang === 'en';
+        const TR = {
+          enterName: isEn ? 'Please enter your name' : 'กรุณากรอกชื่อ',
+          invalidPhone: isEn ? 'Please enter a valid 9-10 digit phone' : 'กรุณากรอกเบอร์โทร 9-10 หลัก',
+          checkoutAfter: isEn ? 'Check-out must be after check-in' : 'วันเช็คเอาท์ต้องอยู่หลังวันเช็คอิน',
+          dateRequired: isEn ? 'Please select check-in and check-out' : 'กรุณาเลือกวันเช็คอินและเช็คเอาท์',
+          fullyBooked: isEn ? 'Sold out for these dates' : 'ไม่ว่างในช่วงนี้',
+          netErr: isEn ? 'Network error. Please try again.' : 'เกิดข้อผิดพลาด กรุณาลองใหม่',
+          bookingFailed: isEn ? 'Booking failed' : 'จองไม่สำเร็จ',
+          confirm: isEn ? 'Confirm booking' : 'ยืนยันการจอง',
+          sending: isEn ? 'Sending...' : 'กำลังส่ง...',
+          locale: isEn ? 'en-US' : 'th-TH',
+          nights: isEn ? 'nights' : 'คืน',
+          rooms: isEn ? 'rooms' : 'ห้อง',
+          total: isEn ? 'Total' : 'รวม',
+          guests: isEn ? 'guests' : 'คน',
+        };
+        const step1 = document.getElementById('hb-step1');
+        const step2 = document.getElementById('hb-step2');
+        const step3 = document.getElementById('hb-step3');
+        const show = (el) => [step1, step2, step3].forEach((s) => s.classList.toggle('hidden', s !== el));
+
+        const state = { hotelId: '', roomIdx: 0, roomName: '', roomPrice: 0, roomQty: 1, maxGuests: 2,
+          checkIn: '', checkOut: '', adults: 2, children: 0, numRooms: 1, nights: 0, totalPrice: 0 };
+
+        // Open modal from any book button
+        document.querySelectorAll('.hotel-book-btn').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            state.hotelId   = btn.dataset.hotelId;
+            state.roomIdx   = Number(btn.dataset.roomIndex) || 0;
+            state.roomName  = btn.dataset.roomName;
+            state.roomPrice = Number(btn.dataset.roomPrice) || 0;
+            state.roomQty   = Number(btn.dataset.roomQty) || 1;
+            state.maxGuests = Number(btn.dataset.roomMaxGuests) || 2;
+
+            document.getElementById('hb-title').textContent = isEn ? 'Book ' + state.roomName : 'จอง ' + state.roomName;
+            document.getElementById('hb-subtitle').textContent = '฿' + state.roomPrice.toLocaleString() + (isEn ? '/night' : '/คืน');
+
+            // Default dates: tomorrow → day after tomorrow
+            const today = new Date();
+            const t1 = new Date(today); t1.setDate(t1.getDate() + 1);
+            const t2 = new Date(today); t2.setDate(t2.getDate() + 2);
+            const fmt = (d) => d.toISOString().slice(0, 10);
+            const ci = document.getElementById('hb-checkin');
+            const co = document.getElementById('hb-checkout');
+            ci.min = fmt(today); ci.value = fmt(t1);
+            co.min = fmt(t1);    co.value = fmt(t2);
+            document.getElementById('hb-step1-err').classList.add('hidden');
+            document.getElementById('hb-adults').max = String(state.maxGuests * state.roomQty);
+            document.getElementById('hb-rooms').max = String(state.roomQty);
+
+            show(step1);
+            dlg.showModal();
+          });
+        });
+
+        document.getElementById('hb-close').addEventListener('click', () => dlg.close());
+        document.getElementById('hb-done').addEventListener('click', () => dlg.close());
+        dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); });
+
+        // Adjust check-out min when check-in changes
+        document.getElementById('hb-checkin').addEventListener('change', (e) => {
+          const v = e.target.value;
+          if (!v) return;
+          const co = document.getElementById('hb-checkout');
+          const next = new Date(v); next.setDate(next.getDate() + 1);
+          const nextStr = next.toISOString().slice(0, 10);
+          co.min = nextStr;
+          if (co.value <= v) co.value = nextStr;
+        });
+
+        // Step 1 → Step 2: check availability
+        document.getElementById('hb-next1').addEventListener('click', async () => {
+          const ci = document.getElementById('hb-checkin').value;
+          const co = document.getElementById('hb-checkout').value;
+          const adults   = Math.max(1, parseInt(document.getElementById('hb-adults').value, 10) || 1);
+          const children = Math.max(0, parseInt(document.getElementById('hb-children').value, 10) || 0);
+          const rooms    = Math.max(1, parseInt(document.getElementById('hb-rooms').value, 10) || 1);
+          const errEl = document.getElementById('hb-step1-err');
+
+          if (!ci || !co) { errEl.textContent = TR.dateRequired; errEl.classList.remove('hidden'); return; }
+          if (new Date(co) <= new Date(ci)) { errEl.textContent = TR.checkoutAfter; errEl.classList.remove('hidden'); return; }
+          errEl.classList.add('hidden');
+
+          state.checkIn = ci; state.checkOut = co;
+          state.adults = adults; state.children = children; state.numRooms = rooms;
+          state.nights = Math.ceil((new Date(co) - new Date(ci)) / 86400000);
+          state.totalPrice = state.roomPrice * state.nights * state.numRooms;
+
+          show(step2);
+          const loadingEl = document.getElementById('hb-availability-loading');
+          const resultEl  = document.getElementById('hb-availability-result');
+          const emptyEl   = document.getElementById('hb-availability-empty');
+          loadingEl.classList.remove('hidden');
+          resultEl.classList.add('hidden');
+          emptyEl.classList.add('hidden');
+
+          const emptyMsgEl = document.getElementById('hb-empty-msg');
+          try {
+            const url = API + '/hotels/' + encodeURIComponent(state.hotelId) + '/availability?checkIn=' + ci + '&checkOut=' + co;
+            const r = await fetch(url);
+            const j = await r.json().catch(() => ({}));
+            loadingEl.classList.add('hidden');
+
+            // Backend error (400/404/500) — surface the message so we don't
+            // mislabel "wrong dates" or "invalid hotel" as "no availability".
+            if (!j || j.success === false) {
+              emptyMsgEl.textContent = (j && j.message) || TR.netErr;
+              emptyEl.classList.remove('hidden');
+              return;
+            }
+            const roomTypes = (j.data && j.data.roomTypes) || [];
+            // Hotel has no rooms configured yet (owner setup incomplete)
+            if (roomTypes.length === 0) {
+              emptyMsgEl.textContent = isEn
+                ? 'This property has no rooms set up yet.'
+                : 'โรงแรมยังไม่ได้ตั้งค่าห้องพัก';
+              emptyEl.classList.remove('hidden');
+              return;
+            }
+            const room = roomTypes[state.roomIdx];
+            // The selected room index isn't in the response (data drift?)
+            if (!room) {
+              emptyMsgEl.textContent = isEn
+                ? 'This room is no longer available.'
+                : 'ห้องประเภทนี้ไม่พบในระบบ';
+              emptyEl.classList.remove('hidden');
+              return;
+            }
+            // Genuinely full for these dates
+            if (room.available < state.numRooms) {
+              emptyMsgEl.textContent = room.available > 0
+                ? (isEn
+                    ? `Only ${room.available} room(s) left for these dates — please reduce quantity.`
+                    : `เหลือเพียง ${room.available} ห้องในวันที่เลือก — กรุณาลดจำนวนห้อง`)
+                : TR.fullyBooked;
+              emptyEl.classList.remove('hidden');
+              return;
+            }
+            // Summary
+            const ciDate = new Date(ci + 'T00:00:00').toLocaleDateString(TR.locale, { day: 'numeric', month: 'short', year: 'numeric' });
+            const coDate = new Date(co + 'T00:00:00').toLocaleDateString(TR.locale, { day: 'numeric', month: 'short', year: 'numeric' });
+            document.getElementById('hb-summary').innerHTML =
+              '<div class="font-semibold">' + state.roomName + ' × ' + state.numRooms + ' ' + TR.rooms + '</div>' +
+              '<div class="mt-0.5 text-xs">📅 ' + ciDate + ' → ' + coDate + ' (' + state.nights + ' ' + TR.nights + ')</div>' +
+              '<div class="mt-0.5 text-xs">👥 ' + (state.adults + state.children) + ' ' + TR.guests + '</div>' +
+              '<div class="mt-1.5 font-bold text-base">' + TR.total + ': ฿' + state.totalPrice.toLocaleString() + '</div>';
+            document.getElementById('hb-name').value = '';
+            document.getElementById('hb-phone').value = '';
+            document.getElementById('hb-email').value = '';
+            document.getElementById('hb-notes').value = '';
+            document.getElementById('hb-err').classList.add('hidden');
+            const submitBtn = document.getElementById('hb-submit');
+            submitBtn.disabled = false;
+            submitBtn.textContent = TR.confirm;
+            resultEl.classList.remove('hidden');
+          } catch (e) {
+            loadingEl.classList.add('hidden');
+            // Real network error — distinguish from "no availability" so the
+            // user can retry instead of giving up.
+            emptyMsgEl.textContent = TR.netErr;
+            emptyEl.classList.remove('hidden');
+          }
+        });
+
+        document.getElementById('hb-back2').addEventListener('click', () => show(step1));
+        document.getElementById('hb-empty-back').addEventListener('click', () => show(step1));
+
+        document.getElementById('hb-submit').addEventListener('click', async () => {
+          const name  = document.getElementById('hb-name').value.trim();
+          const phone = document.getElementById('hb-phone').value.replace(/[-\s]/g, '').trim();
+          const email = document.getElementById('hb-email').value.trim();
+          const notes = document.getElementById('hb-notes').value.trim();
+          const errEl = document.getElementById('hb-err');
+
+          if (!name) { errEl.textContent = TR.enterName; errEl.classList.remove('hidden'); return; }
+          if (!/^\d{9,10}$/.test(phone)) { errEl.textContent = TR.invalidPhone; errEl.classList.remove('hidden'); return; }
+          if (!email) {
+            errEl.textContent = isEn ? 'Please enter your email' : 'กรุณากรอกอีเมล (ใช้ส่งยืนยันการจอง)';
+            errEl.classList.remove('hidden'); return;
+          }
+          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            errEl.textContent = isEn ? 'Invalid email format' : 'รูปแบบอีเมลไม่ถูกต้อง';
+            errEl.classList.remove('hidden'); return;
+          }
+          errEl.classList.add('hidden');
+
+          const btn = document.getElementById('hb-submit');
+          btn.disabled = true; btn.textContent = TR.sending;
+
+          try {
+            // Payload mirrors the mobile HotelBookingScreen.js (line 187-198) —
+            // same fields, same shapes — so backend writes an identical
+            // HotelBooking document regardless of source. Backend POST
+            // /hotels/:id/bookings supports both shapes; we use the canonical
+            // `rooms: [{ roomTypeIndex, numberOfRooms }]` shape from mobile.
+            const r = await fetch(API + '/hotels/' + encodeURIComponent(state.hotelId) + '/bookings', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                checkInDate: state.checkIn,
+                checkOutDate: state.checkOut,
+                rooms: [{ roomTypeIndex: state.roomIdx, numberOfRooms: state.numRooms }],
+                numberOfAdults: state.adults,
+                numberOfChildren: state.children,
+                numberOfGuests: state.adults + state.children,
+                guestName: name,
+                guestPhone: phone,
+                guestEmail: email,
+                notes: notes || undefined,
+              }),
+            });
+            const j = await r.json();
+            if (!j.success) {
+              errEl.textContent = j.message || TR.bookingFailed;
+              errEl.classList.remove('hidden');
+              btn.disabled = false; btn.textContent = TR.confirm;
+              return;
+            }
+            const d = j.data;
+            document.getElementById('hb-confirm-code').textContent = d.bookingCode || '';
+            const ciDate = new Date((d.checkInDate || '').slice(0, 10) + 'T00:00:00').toLocaleDateString(TR.locale, { day: 'numeric', month: 'short' });
+            const coDate = new Date((d.checkOutDate || '').slice(0, 10) + 'T00:00:00').toLocaleDateString(TR.locale, { day: 'numeric', month: 'short', year: 'numeric' });
+            document.getElementById('hb-confirm-detail').textContent = state.roomName + ' · ' + ciDate + ' → ' + coDate;
+            // Show bank info for pay_full hotels (matches mobile post-booking Alert)
+            if (payInfo && payInfo.type === 'pay_full') {
+              document.getElementById('hb-pay-bank').textContent = (isEn ? 'Bank: ' : 'ธนาคาร: ') + payInfo.bankName;
+              document.getElementById('hb-pay-account').textContent = (isEn ? 'Name: ' : 'ชื่อบัญชี: ') + payInfo.accountName;
+              document.getElementById('hb-pay-number').textContent = (isEn ? 'Account: ' : 'เลขบัญชี: ') + payInfo.accountNumber;
+              document.getElementById('hb-pay-info').classList.remove('hidden');
+            }
+            show(step3);
+          } catch (e) {
+            errEl.textContent = TR.netErr;
+            errEl.classList.remove('hidden');
+            btn.disabled = false; btn.textContent = TR.confirm;
+          }
+        });
+      })();
+    </script>
+
+    {/* Location */}
+    {(hotel.address || view.mapUrl) && (
+      <section class="border-t border-gray-100 px-5 py-5">
+        <h2 class="mb-2 text-lg font-bold text-gray-900">{tr.location}</h2>
+        {hotel.address && (
+          <p class="mb-3 text-[15px] leading-relaxed text-gray-700">{hotel.address}</p>
+        )}
+        {view.mapUrl && (
+          <a
+            href={view.mapUrl}
+            target="_blank"
+            rel="noopener"
+            class="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white"
+          >🗺 {tr.directions}</a>
+        )}
+      </section>
+    )}
+
+    {/* Contact */}
+    {view.phone && (
+      <section class="border-t border-gray-100 px-5 py-5">
+        <h2 class="mb-2 text-lg font-bold text-gray-900">{tr.contact}</h2>
+        <a
+          href={`tel:${view.tel}`}
+          class="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-base font-semibold text-white"
+        >📞 {tr.callHotel}: {view.phoneDisplay}</a>
+      </section>
+    )}
+
+    {/* Book in app — primary CTA */}
+    <div class="px-5 py-5">
+      <button
+        id="open-in-app-btn"
+        data-hotel-id={hotelId}
+        class="block w-full rounded-xl bg-blue-600 px-5 py-3.5 text-center text-base font-semibold text-white cursor-pointer"
+      >{tr.bookNow}</button>
+    </div>
+    <script>
+      (function () {
+        var btn = document.getElementById('open-in-app-btn');
+        if (!btn) return;
+        var hotelId = btn.getAttribute('data-hotel-id');
+        var isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+        var isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+        if (!isMobile) {
+          btn.addEventListener('click', function () {
+            window.location.href = 'https://tripdedee.com';
+          });
+          return;
+        }
+
+        btn.addEventListener('click', function () {
+          var appUrl = 'tripdedee://hotel/' + hotelId;
+          var storeUrl = isIOS
+            ? 'https://apps.apple.com/th/app/tripdedee/id6471583311'
+            : 'https://play.google.com/store/apps/details?id=com.munmunback.tripdedee';
+
+          var start = Date.now();
+          window.location.href = appUrl;
+          var timer = setTimeout(function () {
+            if (!document.hidden && Date.now() - start < 3000) {
+              window.location.href = storeUrl;
+            }
+          }, 1800);
+          document.addEventListener('visibilitychange', function onVis() {
+            if (!document.hidden) {
+              clearTimeout(timer);
+              document.removeEventListener('visibilitychange', onVis);
+            }
+          });
+        });
+      })();
+    </script>
+  </ShopLayout>
+)}

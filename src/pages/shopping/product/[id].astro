@@ -1,0 +1,211 @@
+---
+// SSR landing for a single Shopping marketplace product — target of shares
+// from the mobile app's Feed CTA on new_shopping_product posts.
+// Reached via tripdedee.com/shop/shopping/product/<id> (base='/shop')
+//
+// Mirrors the /shop/feed/[id] landing pattern:
+//   - Renders OG meta so FB/LINE previews look right
+//   - Big "เปิดในแอป" button → tripdedee:// scheme (native scheme is already
+//     registered in iOS 41 / Android vc23 build · no rebuild needed)
+//   - Smart-banner JS: on mobile, tries the scheme automatically after 400ms
+//     and if the page stays visible past 1.5s (= no app intercepted) redirects
+//     to the App Store / Play Store. Desktop shows the "เปิดในแอป" button only.
+import { getShoppingProduct } from '../../../lib/api.js';
+
+const id = Astro.params.id || '';
+const product = id ? await getShoppingProduct(id) : null;
+if (!product) Astro.response.status = 404;
+
+const name = product?.name || 'สินค้า TripDeDee Shopping';
+const shopName = product?.shop?.shoppingDisplayName || product?.shop?.name || 'TripDeDee';
+const province = product?.shop?.province || '';
+const price = Number(product?.price || 0);
+const images = Array.isArray(product?.images) && product.images.length > 0
+  ? product.images
+  : (product?.image ? [product.image] : []);
+const heroImage = images[0] || '';
+const description = (product?.description || '').trim().slice(0, 160)
+  || `${name} · ฿${price} · จัดส่งทั่วประเทศ · TripDeDee Shopping`;
+const ogImage = heroImage
+  || product?.shop?.images?.[0]
+  || 'https://tripdedee.com/logo.png';
+const title = `${name} · ฿${price} · TripDeDee Shopping`;
+const canonical = `https://tripdedee.com/shop/shopping/product/${encodeURIComponent(id)}`;
+
+// JSON-LD ชนิด Product (23 ส.ค. 2569)
+//
+// เจ้าของแจ้ง "มีสินค้าใน shopping ด้วยน่ะ ต้องหาเจอ ทั้ง google and AI"
+// หน้านี้มี og/twitter ครบแล้ว แต่ไม่มี structured data เลย Google จึงแสดง
+// ได้แค่ลิงก์ธรรมดา ไม่มีราคา ไม่มีสถานะของ และ AI ก็อ่านราคาไม่ได้
+//
+// หน้าร้าน (ShopPage) มี JSON-LD ชนิด Restaurant อยู่แล้ว หน้าสินค้าใช้
+// Product + Offer ซึ่งเป็นชนิดที่ Google ใช้ทำ rich result ของสินค้า
+//
+// availability อิงจาก stock — ไม่ใส่ค่ามั่วเมื่อไม่รู้จำนวน เพราะ Google
+// ลงโทษ structured data ที่ไม่ตรงกับหน้าจริง
+const stockNum = Number(product?.stock);
+const hasStockInfo = Number.isFinite(stockNum);
+const jsonLd = product ? {
+  '@context': 'https://schema.org',
+  '@type': 'Product',
+  name,
+  description,
+  ...(images.length ? { image: images } : {}),
+  ...(product?.category ? { category: product.category } : {}),
+  ...(shopName ? { brand: { '@type': 'Brand', name: shopName } } : {}),
+  offers: {
+    '@type': 'Offer',
+    url: canonical,
+    priceCurrency: 'THB',
+    price: String(price),
+    ...(hasStockInfo ? {
+      availability: stockNum > 0
+        ? 'https://schema.org/InStock'
+        : 'https://schema.org/OutOfStock',
+    } : {}),
+    seller: { '@type': 'Organization', name: shopName },
+    ...(province ? { areaServed: province } : {}),
+  },
+} : null;
+
+// Deep link into the app's ShoppingProduct screen. App.js Linking listener has
+// a matcher on `shopping/product/<id>` that routes to navigation.navigate.
+const appDeep = `tripdedee://shopping/product/${encodeURIComponent(id)}`;
+// Web fallback — the static Shopping product page (viewer without app can
+// still see + buy). Same URL customers were being sent to before this page
+// existed.
+const webFallback = `https://tripdedee.com/shopping/product.html?id=${encodeURIComponent(id)}`;
+
+// Store URLs — target of the smart-banner fallback when app-open times out.
+// iOS app store id from project_ios_credentials memory: 6763190759.
+const iosStoreUrl = 'https://apps.apple.com/th/app/tripdedee/id6763190759';
+const androidStoreUrl = 'https://play.google.com/store/apps/details?id=com.munmunback.tripdedee';
+---
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+
+    {/* Open Graph (Facebook + LINE) */}
+    <meta property="og:type" content="product" />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:site_name" content="TripDeDee Shopping" />
+    <meta property="og:locale" content="th_TH" />
+    <meta property="product:price:amount" content={String(price)} />
+    <meta property="product:price:currency" content="THB" />
+
+    {jsonLd && (
+      <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
+    )}
+
+    {/* Twitter */}
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImage} />
+
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #fafafa; color: #1a1410; line-height: 1.5; }
+      .wrap { max-width: 560px; margin: 0 auto; padding: 16px; }
+      .card { background: #fff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,.06); }
+      .hero { width: 100%; aspect-ratio: 1; object-fit: cover; background: #eee; display: block; }
+      .body { padding: 16px; }
+      .name { font-size: 18px; font-weight: 700; margin-bottom: 8px; line-height: 1.3; }
+      .price { font-size: 22px; font-weight: 800; color: #1677FF; margin-bottom: 4px; }
+      .shop { font-size: 13px; color: #666; margin-bottom: 12px; }
+      .badge { display: inline-block; padding: 3px 10px; background: #e6f4ff; color: #1677FF; border-radius: 12px; font-size: 12px; font-weight: 700; margin-bottom: 12px; }
+      .desc { font-size: 14px; color: #555; white-space: pre-wrap; margin-top: 8px; padding-top: 12px; border-top: 1px solid #eee; }
+      .cta-row { padding: 0 16px 16px; }
+      .cta { display: block; width: 100%; padding: 14px; background: #1677FF; color: #fff; text-decoration: none; text-align: center; border-radius: 10px; font-weight: 700; font-size: 15px; }
+      .alt-cta { display: block; margin-top: 10px; padding: 12px; color: #666; text-align: center; font-size: 13px; text-decoration: none; }
+      .brand-bar { padding: 16px; text-align: center; font-size: 12px; color: #888; }
+      .brand-bar a { color: #1677FF; text-decoration: none; font-weight: 600; }
+      .not-found { padding: 60px 20px; text-align: center; color: #888; }
+    </style>
+  </head>
+  <body>
+    {product ? (
+      <div class="wrap">
+        <div class="card">
+          {heroImage && <img class="hero" src={heroImage} alt={name} />}
+          <div class="body">
+            <span class="badge">🛍 จัดส่งทั่วประเทศ</span>
+            <div class="name">{name}</div>
+            <div class="price">฿{price.toLocaleString('th-TH')}</div>
+            <div class="shop">{shopName}{province ? ` · 📍 ${province}` : ''}</div>
+            {product.description && <div class="desc">{(product.description || '').slice(0, 400)}</div>}
+          </div>
+          <div class="cta-row">
+            <a id="app-cta" class="cta" href={appDeep}>เปิดในแอป TripDeDee</a>
+            <a class="alt-cta" href={webFallback}>ดูสินค้าบนเว็บ →</a>
+          </div>
+        </div>
+        <div class="brand-bar">
+          Shopping · ของดีท้องถิ่นทั่วไทย · <a href="https://tripdedee.com/">tripdedee.com</a>
+        </div>
+      </div>
+    ) : (
+      <div class="wrap">
+        <div class="card">
+          <div class="not-found">
+            <div style="font-size: 48px; margin-bottom: 12px">🛍</div>
+            <h1 style="font-size: 18px; margin-bottom: 8px; color: #1a1410">ไม่พบสินค้าชิ้นนี้</h1>
+            <p style="margin-bottom: 20px">อาจถูกลบหรือหมดสต๊อกแล้ว</p>
+            <a class="cta" href="https://tripdedee.com/">กลับหน้าหลัก</a>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Smart-banner: on mobile try to open the app automatically. If we're
+        still visible after 1.5s (= no app installed to intercept the scheme),
+        send the visitor to the appropriate app store. Desktop / embedded
+        webviews skip this entirely so their normal behaviour holds. */}
+    <script is:inline define:vars={{ appDeep, iosStoreUrl, androidStoreUrl, hasProduct: !!product }}>
+      (function () {
+        if (!hasProduct) return;
+        const ua = navigator.userAgent || '';
+        const isIOS = /iPhone|iPad|iPod/i.test(ua);
+        const isAndroid = /Android/i.test(ua);
+        if (!isIOS && !isAndroid) return;
+        // Skip inside embedded webviews (FB / IG / LINE in-app browser) —
+        // custom schemes are usually blocked there and a store redirect
+        // hijacks people who just want to preview.
+        if (/FBAN|FBAV|Instagram|Line\/|Twitter|MicroMessenger/i.test(ua)) return;
+        // Skip if the URL carries an opt-out flag (share-QR-scan flow uses
+        // ?web=1 when it wants the plain landing).
+        if (new URLSearchParams(location.search).get('web') === '1') return;
+
+        let cancelled = false;
+        const cancel = () => { cancelled = true; };
+        // Any of these firing means the app-open likely succeeded → don't
+        // navigate to the store.
+        window.addEventListener('pagehide', cancel, { once: true });
+        window.addEventListener('blur', cancel, { once: true });
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'hidden') cancel();
+        }, { once: true });
+
+        // Try the scheme after a tiny delay so listeners are wired up first.
+        setTimeout(() => {
+          try { window.location.href = appDeep; } catch (_) {}
+        }, 400);
+
+        // If we're still visible ~1.5s later, the app didn't intercept.
+        setTimeout(() => {
+          if (cancelled) return;
+          if (document.visibilityState !== 'visible') return;
+          window.location.href = isIOS ? iosStoreUrl : androidStoreUrl;
+        }, 1900);
+      })();
+    </script>
+  </body>
+</html>

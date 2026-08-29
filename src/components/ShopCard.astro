@@ -1,0 +1,55 @@
+---
+// Compact card for shop listings (search results, area/category pages, etc.)
+// Links to the canonical shop page using the same slug helper the rest of
+// the SSR uses, so renames continue to redirect cleanly.
+import { shopHref } from '../lib/slug.js';
+import { typeLabel } from '../lib/shopType.js';
+
+const { shop, lang = 'th' } = Astro.props;
+// ลิงก์ในรายการร้านใช้ Shop.slug เหมือนกันทั้งเว็บ จะได้ไม่โดนเด้งอีกต่อ
+const href = shopHref(lang, shop);
+const img = Array.isArray(shop.images) && shop.images.length ? shop.images[0] : null;
+const typeLabelText = typeLabel(shop, lang) || '';
+const rating = Number(shop.averageRating) || 0;
+const reviews = Number(shop.totalReviews) || 0;
+const province = shop.province || '';
+const district = shop.district || '';
+const area = [district, province].filter(Boolean).join(', ');
+---
+
+<a
+  href={href}
+  class="group block overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition hover:shadow-md hover:border-orange-300"
+>
+  <div class="relative aspect-[4/3] bg-gray-100 overflow-hidden">
+    {img ? (
+      <img
+        src={img}
+        alt={shop.shopName}
+        loading="lazy"
+        class="h-full w-full object-cover transition group-hover:scale-[1.02]"
+      />
+    ) : (
+      <div class="flex h-full w-full items-center justify-center text-5xl text-gray-300">🍽</div>
+    )}
+    {rating > 0 ? (
+      <div class="absolute right-2 top-2 rounded-full bg-white/95 px-2 py-0.5 text-xs font-bold text-orange-600 shadow">
+        ⭐ {rating.toFixed(1)}
+      </div>
+    ) : null}
+  </div>
+  <div class="p-3">
+    <h3 class="line-clamp-2 min-h-[2.6em] text-sm font-bold text-gray-900">
+      {shop.shopName}
+    </h3>
+    <div class="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-gray-500">
+      {typeLabelText ? <span class="rounded bg-orange-50 px-1.5 py-0.5 font-semibold text-orange-700">{typeLabelText}</span> : null}
+      {area ? <span class="truncate">{area}</span> : null}
+    </div>
+    {reviews > 0 ? (
+      <div class="mt-1 text-[11px] text-gray-400">
+        {reviews.toLocaleString()} รีวิว
+      </div>
+    ) : null}
+  </div>
+</a>

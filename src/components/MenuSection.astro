@@ -1,0 +1,424 @@
+---
+import { t } from '../lib/i18n.js';
+
+const { items = [], lang, title } = Astro.props;
+const tr = t(lang);
+
+// Group by free-text category, preserving first-seen order.
+const groups = [];
+const byName = new Map();
+for (const item of items) {
+  const cat = (item.category && item.category.trim()) || '';
+  if (!byName.has(cat)) {
+    const g = { cat, items: [] };
+    byName.set(cat, g);
+    groups.push(g);
+  }
+  byName.get(cat).items.push(item);
+}
+
+const fmt = (n) => `${tr.baht}${Number(n || 0).toLocaleString()}`;
+
+// Build a per-item JSON blob for the modal. Inline-encoded in data-payload
+// so the modal can render add-ons / customizations without an extra fetch.
+// Strips heavy fields (sortOrder, kind, type metadata) to keep the DOM
+// payload small even on shops with 100+ items.
+const payloadFor = (it) => JSON.stringify({
+  name: it.name || '',
+  price: Number(it.price) || 0,
+  image: it.image || '',
+  description: it.description || '',
+  category: it.category || '',
+  isAvailable: it.isAvailable !== false,
+  customizationGroups: (it.customizationGroups || []).map((g) => ({
+    label: g.label || '',
+    options: g.options || [],
+    required: !!g.required,
+  })),
+  addOnGroups: (it.addOnGroups || []).map((g) => ({
+    label: g.label || '',
+    minSelect: g.minSelect || 0,
+    maxSelect: g.maxSelect || 1,
+    subOptions: (g.subOptions || []).map((s) => ({
+      label: s.label || '',
+      price: Number(s.price) || 0,
+    })),
+  })),
+});
+---
+
+{items.length > 0 && (
+  <section class="border-t border-gray-100 px-4 py-5 sm:px-5">
+    <div class="mb-4 flex items-center justify-between gap-3">
+      <h2 class="text-lg font-bold text-gray-900">{title || tr.menu}</h2>
+      <span id="menu-result-count" class="hidden text-xs font-medium text-gray-500"></span>
+    </div>
+
+    {/* Search bar — sticky-ish (only sticks within section). Filters items
+        live · matches against item name + category · diacritic-insensitive
+        for Thai. Mobile keyboard "search" key triggers blur (no submit). */}
+    <div class="relative mb-5">
+      <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-400">
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
+        </svg>
+      </span>
+      <input
+        id="menu-search"
+        type="search"
+        autocomplete="off"
+        placeholder={tr.searchMenu || 'ค้นหาเมนู...'}
+        class="w-full rounded-xl border border-gray-200 bg-gray-50 py-3 pl-11 pr-10 text-sm placeholder-gray-400 outline-none transition focus:border-orange-400 focus:bg-white focus:ring-2 focus:ring-orange-100"
+      />
+      <button
+        id="menu-search-clear"
+        type="button"
+        aria-label="ล้าง"
+        class="absolute inset-y-0 right-2 hidden items-center justify-center px-2 text-gray-400 hover:text-gray-600"
+      >
+        <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+
+    {/* Empty state — shown only when search returns 0 matches */}
+    <div id="menu-empty-state" class="hidden py-10 text-center text-sm text-gray-500">
+      <div class="mb-2 text-3xl">🔍</div>
+      <p>ไม่พบเมนูที่ค้นหา</p>
+      <p class="mt-1 text-xs text-gray-400">ลองค้นหาด้วยคำอื่นดูครับ</p>
+    </div>
+
+    <div id="menu-groups">
+      {groups.map((g) => (
+        <div class="menu-group mb-6 last:mb-0" data-cat={g.cat || ''}>
+          {g.cat && <h3 class="menu-group-title mb-3 text-sm font-semibold text-gray-500">{g.cat}</h3>}
+          {/* Card grid · larger images for visual appeal. 2 cols mobile,
+              3 cols tablet, 4 cols desktop. Aspect-ratio 4:3 keeps cards
+              uniform regardless of original photo dimensions. */}
+          <ul class="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4">
+            {g.items.map((item) => (
+              <li
+                class="menu-item"
+                data-search={`${item.name || ''} ${item.category || ''} ${item.description || ''}`.toLowerCase()}
+              >
+                <button
+                  type="button"
+                  data-menu-item
+                  data-payload={payloadFor(item)}
+                  class={`group flex w-full flex-col overflow-hidden rounded-xl border border-gray-100 bg-white text-left shadow-sm transition active:scale-[0.98] hover:shadow-md ${item.isAvailable === false ? 'opacity-60' : ''}`}
+                >
+                  {item.image ? (
+                    <div class="relative aspect-[4/3] w-full overflow-hidden bg-gray-100">
+                      <img
+                        src={item.image}
+                        alt={item.name}
+                        class="h-full w-full object-cover transition group-hover:scale-105"
+                        loading="lazy"
+                      />
+                      {item.isAvailable === false && (
+                        <span class="absolute left-2 top-2 rounded-full bg-red-500/90 px-2 py-0.5 text-[10px] font-bold text-white">
+                          {tr.unavailable}
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <div class="flex aspect-[4/3] w-full items-center justify-center bg-gray-100 text-4xl text-gray-300">🍽</div>
+                  )}
+                  <div class="flex flex-1 flex-col gap-1 px-3 py-2.5">
+                    <span class="line-clamp-2 text-sm font-semibold leading-snug text-gray-900">{item.name}</span>
+                    {item.description && (
+                      <p class="line-clamp-1 text-xs text-gray-500">{item.description}</p>
+                    )}
+                    <span class="mt-auto pt-1 text-base font-extrabold text-orange-600">{fmt(item.price)}</span>
+                  </div>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+
+    {/* Search filter logic — runs entirely client-side over data-search
+        attributes pre-baked into each <li>. No fetch, no debounce needed
+        (small datasets, ≤ 1000 items). Hides items + group headers when
+        zero items match the term in that group. */}
+    <script is:inline>
+      (() => {
+        const input = document.getElementById('menu-search');
+        const clearBtn = document.getElementById('menu-search-clear');
+        const groupsContainer = document.getElementById('menu-groups');
+        const emptyState = document.getElementById('menu-empty-state');
+        const counter = document.getElementById('menu-result-count');
+        if (!input || !groupsContainer) return;
+        const allItems = Array.from(groupsContainer.querySelectorAll('.menu-item'));
+        const allGroups = Array.from(groupsContainer.querySelectorAll('.menu-group'));
+        const totalCount = allItems.length;
+
+        const norm = (s) => String(s || '').toLowerCase().trim();
+
+        function apply(term) {
+          const q = norm(term);
+          if (!q) {
+            allItems.forEach((li) => li.classList.remove('hidden'));
+            allGroups.forEach((g) => g.classList.remove('hidden'));
+            emptyState.classList.add('hidden');
+            counter.classList.add('hidden');
+            clearBtn.classList.add('hidden');
+            clearBtn.classList.remove('flex');
+            return;
+          }
+
+          let visibleCount = 0;
+          // Show/hide items
+          allItems.forEach((li) => {
+            const match = (li.dataset.search || '').includes(q);
+            li.classList.toggle('hidden', !match);
+            if (match) visibleCount += 1;
+          });
+
+          // Hide groups that have zero visible items
+          allGroups.forEach((g) => {
+            const anyVisible = g.querySelectorAll('.menu-item:not(.hidden)').length > 0;
+            g.classList.toggle('hidden', !anyVisible);
+          });
+
+          emptyState.classList.toggle('hidden', visibleCount > 0);
+          counter.textContent = `${visibleCount} / ${totalCount} เมนู`;
+          counter.classList.remove('hidden');
+          clearBtn.classList.remove('hidden');
+          clearBtn.classList.add('flex');
+        }
+
+        input.addEventListener('input', (e) => apply(e.target.value));
+        clearBtn.addEventListener('click', () => {
+          input.value = '';
+          apply('');
+          input.focus();
+        });
+      })();
+    </script>
+  </section>
+)}
+
+{items.length > 0 && (
+  <>
+    {/* Modal — single instance, populated on click. Kept outside the menu
+        section's <ul> so the structured list isn't polluted with hidden
+        elements. */}
+    <div
+      id="menu-item-modal"
+      class="fixed inset-0 z-50 hidden items-end justify-center bg-black/60 backdrop-blur-sm sm:items-center"
+      role="dialog"
+      aria-modal="true"
+      aria-hidden="true"
+    >
+      <div class="relative max-h-[92vh] w-full overflow-hidden bg-white sm:max-w-md sm:rounded-2xl sm:shadow-2xl">
+        {/* Hero image */}
+        <div id="menu-modal-image-wrap" class="relative bg-gray-100">
+          <img id="menu-modal-image" alt="" class="block h-72 w-full object-cover sm:h-80" />
+          <button
+            type="button"
+            id="menu-modal-close"
+            aria-label="ปิด"
+            class="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-white/95 text-xl font-bold text-gray-700 shadow-md transition hover:bg-white"
+          >
+            ×
+          </button>
+          <div id="menu-modal-unavailable" class="absolute left-3 top-3 hidden rounded-full bg-red-500/90 px-3 py-1 text-xs font-bold text-white">
+            {tr.unavailable || 'ปิดขาย'}
+          </div>
+          {/* Brand badge — bottom-left of the hero so the modal is
+              unmistakably ours even when shared as a screenshot. */}
+          <div class="absolute bottom-3 left-3 flex items-center gap-1.5 rounded-full bg-white/95 px-2.5 py-1 shadow-md backdrop-blur">
+            <img
+              src="https://tripdedee.com/logo.png"
+              alt="TripDeDee"
+              class="h-5 w-5 rounded"
+              loading="lazy"
+            />
+            <span class="text-[11px] font-bold text-gray-800">TripDeDee</span>
+          </div>
+        </div>
+
+        {/* Scrollable body */}
+        <div class="max-h-[calc(92vh-18rem)] overflow-y-auto px-5 py-4 sm:max-h-[calc(92vh-20rem)]">
+          {/* Category chip */}
+          <div id="menu-modal-category" class="mb-1 hidden">
+            <span class="inline-block rounded bg-orange-50 px-2 py-0.5 text-xs font-semibold text-orange-700"></span>
+          </div>
+
+          {/* Name + price */}
+          <div class="flex items-start justify-between gap-3">
+            <h3 id="menu-modal-name" class="text-xl font-extrabold text-gray-900"></h3>
+            <span id="menu-modal-price" class="shrink-0 text-xl font-extrabold text-orange-600"></span>
+          </div>
+
+          {/* Description */}
+          <p id="menu-modal-description" class="mt-2 hidden text-sm leading-relaxed text-gray-600"></p>
+
+          {/* Customization groups (free) */}
+          <div id="menu-modal-custom-groups" class="mt-5 space-y-4"></div>
+
+          {/* Paid add-ons */}
+          <div id="menu-modal-addon-groups" class="mt-5 space-y-4"></div>
+        </div>
+
+        {/* Footer · TripDeDee branded CTA */}
+        <a
+          href="https://tripdedee.com/"
+          class="flex items-center justify-center gap-2 border-t border-gray-100 bg-gradient-to-r from-orange-50 to-rose-50 px-5 py-3 transition hover:from-orange-100 hover:to-rose-100"
+        >
+          <img
+            src="https://tripdedee.com/logo.png"
+            alt="TripDeDee"
+            class="h-7 w-7 rounded-lg"
+            loading="lazy"
+          />
+          <span class="text-sm font-bold text-gray-800">
+            เปิดแอป <span class="text-orange-600">TripDeDee</span> เพื่อสั่งเมนูนี้
+          </span>
+        </a>
+      </div>
+    </div>
+
+    <script is:inline define:vars={{ bahtSymbol: tr.baht || '฿' }}>
+      (() => {
+        const modal = document.getElementById('menu-item-modal');
+        if (!modal) return;
+        const imgWrap = document.getElementById('menu-modal-image-wrap');
+        const img = document.getElementById('menu-modal-image');
+        const unavailable = document.getElementById('menu-modal-unavailable');
+        const nameEl = document.getElementById('menu-modal-name');
+        const priceEl = document.getElementById('menu-modal-price');
+        const descEl = document.getElementById('menu-modal-description');
+        const catEl = document.getElementById('menu-modal-category');
+        const catLabel = catEl.querySelector('span');
+        const customGroupsEl = document.getElementById('menu-modal-custom-groups');
+        const addonGroupsEl = document.getElementById('menu-modal-addon-groups');
+        const closeBtn = document.getElementById('menu-modal-close');
+
+        const fmtBaht = (n) => `${bahtSymbol}${Number(n || 0).toLocaleString()}`;
+        const escapeHtml = (s) => String(s || '').replace(/[&<>"']/g, (c) =>
+          ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])
+        );
+
+        function openModal(payload) {
+          // Hero image · hide the wrap entirely when there's no image so the
+          // modal collapses to body-only instead of showing a 72px gray box.
+          if (payload.image) {
+            img.src = payload.image;
+            img.alt = payload.name || '';
+            imgWrap.classList.remove('hidden');
+            imgWrap.style.display = '';
+          } else {
+            img.removeAttribute('src');
+            imgWrap.style.display = 'none';
+          }
+
+          // Out-of-stock banner
+          if (payload.isAvailable === false) {
+            unavailable.classList.remove('hidden');
+          } else {
+            unavailable.classList.add('hidden');
+          }
+
+          // Category chip
+          if (payload.category) {
+            catLabel.textContent = payload.category;
+            catEl.classList.remove('hidden');
+          } else {
+            catEl.classList.add('hidden');
+          }
+
+          nameEl.textContent = payload.name || '';
+          priceEl.textContent = fmtBaht(payload.price);
+
+          if (payload.description) {
+            descEl.textContent = payload.description;
+            descEl.classList.remove('hidden');
+          } else {
+            descEl.classList.add('hidden');
+          }
+
+          // Customization (free) groups
+          const customHtml = (payload.customizationGroups || []).map((g) => {
+            const opts = (g.options || []).map((o) =>
+              `<span class="rounded-full border border-gray-200 bg-white px-3 py-1 text-sm text-gray-700">${escapeHtml(o)}</span>`
+            ).join('');
+            if (!opts) return '';
+            const required = g.required
+              ? '<span class="ml-1 text-[10px] font-bold text-red-500">*จำเป็น</span>'
+              : '';
+            return `
+              <div>
+                <div class="mb-2 text-sm font-bold text-gray-800">
+                  ${escapeHtml(g.label || '')}${required}
+                </div>
+                <div class="flex flex-wrap gap-2">${opts}</div>
+              </div>
+            `;
+          }).join('');
+          customGroupsEl.innerHTML = customHtml;
+
+          // Paid add-on groups
+          const addonHtml = (payload.addOnGroups || []).map((g) => {
+            const subs = (g.subOptions || []).map((s) => `
+              <li class="flex items-center justify-between border-b border-gray-100 py-2 text-sm last:border-0">
+                <span class="text-gray-700">${escapeHtml(s.label || '')}</span>
+                ${s.price > 0
+                  ? `<span class="font-semibold text-orange-600">+${fmtBaht(s.price)}</span>`
+                  : `<span class="text-xs text-gray-400">ฟรี</span>`}
+              </li>
+            `).join('');
+            if (!subs) return '';
+            const cap = g.maxSelect && g.maxSelect > 1
+              ? `<span class="ml-1 text-[10px] font-medium text-gray-400">(เลือกได้สูงสุด ${g.maxSelect})</span>`
+              : '';
+            return `
+              <div>
+                <div class="mb-1 text-sm font-bold text-gray-800">
+                  ${escapeHtml(g.label || '')}${cap}
+                </div>
+                <ul>${subs}</ul>
+              </div>
+            `;
+          }).join('');
+          addonGroupsEl.innerHTML = addonHtml;
+
+          modal.classList.remove('hidden');
+          modal.classList.add('flex');
+          modal.setAttribute('aria-hidden', 'false');
+          document.body.style.overflow = 'hidden';
+        }
+
+        function closeModal() {
+          modal.classList.add('hidden');
+          modal.classList.remove('flex');
+          modal.setAttribute('aria-hidden', 'true');
+          document.body.style.overflow = '';
+        }
+
+        // Click-to-open
+        document.querySelectorAll('[data-menu-item]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            try {
+              const payload = JSON.parse(btn.getAttribute('data-payload') || '{}');
+              openModal(payload);
+            } catch (_) { /* malformed payload — silently skip */ }
+          });
+        });
+
+        // Close interactions
+        closeBtn.addEventListener('click', closeModal);
+        modal.addEventListener('click', (e) => {
+          if (e.target === modal) closeModal();
+        });
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape' && !modal.classList.contains('hidden')) closeModal();
+        });
+      })();
+    </script>
+  </>
+)}

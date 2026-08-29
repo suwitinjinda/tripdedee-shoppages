@@ -1,0 +1,236 @@
+---
+// SSR landing for a single Food Feed post — used as the target of "Share to
+// Facebook" so the FB scraper sees real OG meta tags + an image preview.
+// Reached via tripdedee.com/shop/feed/<postId>  (base='/shop')
+import { getFeedPost } from '../../lib/api.js';
+
+const id = Astro.params.id || '';
+const post = id ? await getFeedPost(id) : null;
+if (!post) {
+  Astro.response.status = 404;
+}
+
+// Adapt to source — shop/system posts headline the shop; user posts headline
+// the author so the share preview reflects who actually wrote the post.
+const isUser = post?.source === 'user';
+const headlineName = isUser
+  ? (post?.author?.name || 'ผู้ใช้ TripDeDee')
+  : (post?.shop?.name || 'TripDeDee');
+const headlineAvatar = isUser ? post?.author?.avatar : post?.shop?.avatar;
+const headlineMeta = isUser
+  ? '✨ โพสต์จากผู้ใช้ TripDeDee'
+  : (post?.shop?.province ? `📍 ${post.shop.province}` : null);
+const caption = (post?.caption || '').trim().slice(0, 160);
+/* ── คำบรรยายในแท็ก meta ต้องไม่มีการขึ้นบรรทัดใหม่ (28 ส.ค. 2569) ──
+ * แคปชันจริงมีขึ้นบรรทัดใหม่ ซึ่งในตัวหน้าเว็บต้องคงไว้ (white-space: pre-wrap)
+ * แต่พอยัดลงในแอตทริบิวต์ของแท็ก meta แล้วมันขึ้นบรรทัดคาอยู่ในเครื่องหมายคำพูด
+ * ตัวอ่านบางตัวตัดตรงนั้นทิ้ง ทำให้คำบรรยายขาดกลางคัน · ยุบช่องว่างทุกชนิด
+ * ให้เหลือเว้นวรรคเดียวเฉพาะที่ใช้กับ meta ส่วนตัวหน้าเว็บใช้ของเดิม */
+const metaText = (t) => String(t || '').replace(/\s+/g, ' ').trim();
+// heroImage = visible hero in the body, only set when the post itself has a
+// photo. ogImage = the meta tag for FB / LINE preview; falls back to the
+// author/shop avatar then a static logo so a text-only post still shows
+// SOMETHING in the social-card preview instead of a blank thumbnail.
+/* ── โพสต์ที่เป็นคลิป ต้องให้เฟซบุ๊กเล่นได้ในฟีดเลย (28 ส.ค. 2569) ──
+ *
+ * ของเดิมมีแต่ og:image เฟซบุ๊กจึงได้แค่การ์ดรูปนิ่ง ต้องกดออกจากเฟซบุ๊ก
+ * มาเปิดเว็บถึงจะได้ดูคลิป · คนส่วนใหญ่ไม่กด
+ *
+ * เฟซบุ๊กจะขึ้นตัวเล่นในฟีดให้ต่อเมื่อมี og:video ครบชุด — ที่อยู่แบบ https,
+ * ชนิดไฟล์, และขนาดกว้างยาว · ขาดตัวใดตัวหนึ่งจะตกกลับไปเป็นการ์ดรูปนิ่ง
+ * และ og:type ต้องเป็น video.* ไม่ใช่ article
+ *
+ * รูปปกยังต้องมี — เฟซบุ๊กใช้เป็นภาพนิ่งก่อนคนกดเล่น และเป็นตัวสำรอง
+ * ตอนที่ตัวเล่นใช้ไม่ได้ (เช่นบนแอปรุ่นเก่า)
+ */
+const video = post?.video?.url ? post.video : null;
+const heroImage = post?.images?.[0] || '';
+// คลิปมีรูปปกของตัวเอง ใช้ปกนั้นดีกว่ารูปแรกของโพสต์ซึ่งอาจเป็นคนละภาพ
+const ogImage = (video && video.poster)
+  || heroImage
+  || headlineAvatar
+  || 'https://tripdedee.com/logo.png';
+const title = `${headlineName} · TripDeDee`;
+const description = metaText(caption) || (isUser
+  ? 'มาดูประสบการณ์การกิน เที่ยว ใช้ชีวิตจากผู้ใช้จริงในแอป TripDeDee'
+  : 'ของอร่อยจากร้านท้องถิ่นทั่วไทย · ส่งถึงบ้าน');
+/* ลิงก์มาตรฐานใช้รหัสสั้นเสมอ ถ้าโพสต์นั้นมี
+ *
+ * คนที่เปิดด้วยลิงก์เก่า (_id) จะได้ canonical เป็นรหัสสั้น เสิร์ชเอนจินจะได้
+ * ไม่เก็บสองที่อยู่สำหรับหน้าเดียวกัน */
+const shareKey = post?.slug || id;
+const canonical = `https://tripdedee.com/shop/feed/${encodeURIComponent(shareKey)}`;
+
+/* ลิงก์เข้าแอปต้องใช้ id จริงของโพสต์ ไม่ใช่สิ่งที่อยู่ใน URL
+ *
+ * ตัวเชื่อมของแอปหาโพสต์ด้วย post id · พอ URL เปลี่ยนไปเป็นรหัสสั้น ถ้ายัง
+ * ส่งค่าจาก URL ต่อไปตรง ๆ แอปจะหาโพสต์ไม่เจอแล้วเปิดมาเป็นหน้าว่าง
+ * (เจอตอนไล่บัค 29 ส.ค. 2569 ก่อนขึ้นจริง)
+ */
+const appDeep = `tripdedee://feed/post/${encodeURIComponent(post?.id || id)}`;
+// Web fallback — for shop posts, go to the shop's promo page; for user posts,
+// there's no canonical user-profile web page yet, so route to the homepage.
+const webFallback = !isUser && post?.shop?.id
+  ? `https://tripdedee.com/shop/${encodeURIComponent(post.shop.id)}`
+  : 'https://tripdedee.com/';
+const webFallbackLabel = !isUser && post?.shop?.id ? 'ดูหน้าร้านบนเว็บ →' : 'ไปหน้าหลัก →';
+
+// Store URLs — smart-banner fallback when app-open times out (no app installed).
+// iOS app id from project_ios_credentials · Android package from app.config.js.
+const iosStoreUrl = 'https://apps.apple.com/th/app/tripdedee/id6763190759';
+const androidStoreUrl = 'https://play.google.com/store/apps/details?id=com.munmunback.tripdedee';
+---
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+
+    {/* Open Graph (Facebook + LINE) */}
+    <meta property="og:type" content={video ? 'video.other' : 'article'} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:image" content={ogImage} />
+    {video && (
+      <>
+        <meta property="og:video" content={video.url} />
+        <meta property="og:video:secure_url" content={video.url} />
+        <meta property="og:video:type" content="video/mp4" />
+        <meta property="og:video:width" content={String(video.width || 720)} />
+        <meta property="og:video:height" content={String(video.height || 1280)} />
+        {video.durationSec && <meta property="video:duration" content={String(video.durationSec)} />}
+      </>
+    )}
+    {/* เฟซบุ๊กฟ้องว่าขาดตัวนี้ทุกครั้งใน Sharing Debugger — เป็นรหัสแอปสาธารณะ
+        ตัวเดียวกับที่ฝังอยู่ในทุกหน้าที่ใช้ SDK ของเฟซบุ๊กอยู่แล้ว ไม่ใช่ความลับ */}
+    <meta property="fb:app_id" content="1770102767299571" />
+    <meta property="og:site_name" content="TripDeDee" />
+    <meta property="og:locale" content="th_TH" />
+
+    {/* Twitter */}
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImage} />
+
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #fafafa; color: #1a1410; line-height: 1.5; }
+      .wrap { max-width: 560px; margin: 0 auto; padding: 16px; }
+      .card { background: #fff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,.06); }
+      .head { display: flex; align-items: center; gap: 10px; padding: 14px; border-bottom: 1px solid #eee; }
+      .avatar { width: 44px; height: 44px; border-radius: 22px; background: #ddd; object-fit: cover; }
+      .shop-name { font-weight: 700; font-size: 15px; }
+      .shop-meta { font-size: 12px; color: #888; margin-top: 2px; }
+      .hero { width: 100%; aspect-ratio: 1.2; object-fit: cover; background: #eee; display: block; }
+
+      /* คลิปต้องเห็นเต็ม ไม่ใช่โดนครอบ
+       *
+       * เดิมคลิปใช้ .hero ตัวเดียวกับรูปนิ่ง ซึ่งบังคับกรอบ 1.2:1 แล้ว crop
+       * ส่วนเกินทิ้ง · คลิปของร้านถ่ายแนวตั้ง 1080x1920 (0.56) จึงถูกตัดออก
+       * ไปครึ่งกว่า ๆ เหลือแต่ท่อนบน (เจ้าของทัก 29 ส.ค. 2569)
+       *
+       * ใช้สัดส่วนจริงของคลิปแต่ละอันแทน · contain ไม่ใช่ cover จะได้ไม่ตัด
+       * และคุมความสูงไว้ ไม่งั้นคลิปแนวตั้งจะกินทั้งจอจนไม่เห็นปุ่มข้างล่าง
+       */
+      .clip-box { width: 100%; max-height: 68vh; background: #000; display: flex; }
+      .clip { width: 100%; height: 100%; max-height: 68vh; object-fit: contain;
+              background: #000; display: block; }
+      .caption { padding: 14px; font-size: 15px; white-space: pre-wrap; }
+      .cta-row { padding: 0 14px 14px; }
+      .cta { display: block; width: 100%; padding: 14px; background: #e2641c; color: #fff; text-decoration: none; text-align: center; border-radius: 10px; font-weight: 700; font-size: 15px; }
+      .alt-cta { display: block; margin-top: 10px; padding: 12px; color: #666; text-align: center; font-size: 13px; text-decoration: none; }
+      .back-feed { display: block; margin-top: 2px; padding: 10px; color: #e2641c;
+                   text-align: center; font-size: 13px; font-weight: 600; text-decoration: none; }
+      .back-feed:hover { text-decoration: underline; }
+      .brand-bar { padding: 16px; text-align: center; font-size: 12px; color: #888; }
+      .brand-bar a { color: #e2641c; text-decoration: none; font-weight: 600; }
+      .not-found { padding: 60px 20px; text-align: center; color: #888; }
+    </style>
+  </head>
+  <body>
+    {post ? (
+      <div class="wrap">
+        <div class="card">
+          <div class="head">
+            {headlineAvatar
+              ? <img class="avatar" src={headlineAvatar} alt="" />
+              : <div class="avatar"></div>}
+            <div>
+              <div class="shop-name">{headlineName}</div>
+              {headlineMeta && <div class="shop-meta">{headlineMeta}</div>}
+            </div>
+          </div>
+          {video
+            ? (
+              <div class="clip-box" style={`aspect-ratio:${video.width || 720}/${video.height || 1280}`}>
+                <video class="clip" src={video.url} poster={video.poster} controls playsinline preload="metadata" muted loop></video>
+              </div>
+            )
+            : heroImage && <img class="hero" src={heroImage} alt={caption || headlineName} />}
+          {caption && <div class="caption">{caption}</div>}
+          <div class="cta-row">
+            <a class="cta" href={appDeep}>เปิดในแอป TripDeDee</a>
+            <a class="alt-cta" href={webFallback}>{webFallbackLabel}</a>
+            {/* ทางกลับไปฟีดหลัก — เดิมหน้านี้เป็นทางตัน คนที่เปิดจากลิงก์ที่
+                เพื่อนแชร์มาแล้วยังไม่อยากโหลดแอป ไม่มีทางไปดูโพสต์อื่นต่อเลย
+                นอกจากกดปุ่มย้อนกลับของเบราว์เซอร์ (เจ้าของทัก 29 ส.ค. 2569) */}
+            <a class="back-feed" href="https://tripdedee.com/feed/">← ดูโพสต์อื่นในฟีด</a>
+          </div>
+        </div>
+        <div class="brand-bar">
+          ของอร่อยจากร้านท้องถิ่นทั่วไทย · <a href="https://tripdedee.com/">tripdedee.com</a>
+        </div>
+      </div>
+    ) : (
+      <div class="wrap">
+        <div class="card">
+          <div class="not-found">
+            <div style="font-size: 48px; margin-bottom: 12px">🍜</div>
+            <h1 style="font-size: 18px; margin-bottom: 8px; color: #1a1410">โพสต์นี้ถูกลบหรือไม่พบ</h1>
+            <p style="margin-bottom: 20px">เปิด TripDeDee เพื่อดูโพสต์อื่น ๆ</p>
+            <a class="cta" href="https://tripdedee.com/">กลับหน้าหลัก</a>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Smart-banner: mobile visitor with the app → auto-open in-app · without
+        the app → App Store / Play Store after 1.9s timeout. Skips embedded
+        webviews (FB/IG/LINE in-app browsers where custom schemes are blocked)
+        and desktop. Mirrors the shopping/product/[id] landing script exactly. */}
+    <script is:inline define:vars={{ appDeep, iosStoreUrl, androidStoreUrl, hasPost: !!post }}>
+      (function () {
+        if (!hasPost) return;
+        const ua = navigator.userAgent || '';
+        const isIOS = /iPhone|iPad|iPod/i.test(ua);
+        const isAndroid = /Android/i.test(ua);
+        if (!isIOS && !isAndroid) return;
+        if (/FBAN|FBAV|Instagram|Line\/|Twitter|MicroMessenger/i.test(ua)) return;
+        if (new URLSearchParams(location.search).get('web') === '1') return;
+
+        let cancelled = false;
+        const cancel = () => { cancelled = true; };
+        window.addEventListener('pagehide', cancel, { once: true });
+        window.addEventListener('blur', cancel, { once: true });
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'hidden') cancel();
+        }, { once: true });
+
+        setTimeout(() => {
+          try { window.location.href = appDeep; } catch (_) {}
+        }, 400);
+
+        setTimeout(() => {
+          if (cancelled) return;
+          if (document.visibilityState !== 'visible') return;
+          window.location.href = isIOS ? iosStoreUrl : androidStoreUrl;
+        }, 1900);
+      })();
+    </script>
+  </body>
+</html>

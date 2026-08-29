@@ -1,0 +1,417 @@
+---
+// components/HeroPage.astro — SSR Hero public profile page.
+// Composes three surfaces from a single fetch:
+//   1. FB/LINE share preview via OG tags (og:image = first portfolio pic)
+//   2. Public landing HTML with about · stats · portfolio · promos
+//   3. Deep-link CTAs — auto-attempt on load + visible "เปิดในแอป" button;
+//      fallback to Play Store / App Store install links
+import ShopLayout from '../layouts/ShopLayout.astro';
+
+const { userId, lang = 'th', hero, isPublic } = Astro.props;
+const SITE = 'https://tripdedee.com';
+const canonical = `${SITE}/hero/${userId}`;
+
+// ── App links ─────────────────────────────────────────────────────
+// Deep-link scheme is `tripdedee://hero/:userId` (handled by the app's
+// linking config). Fallback to store install pages that carry a ref
+// back to the profile so acquisition metrics tie back.
+const APP_SCHEME = `tripdedee://hero/${userId}`;
+const PLAY_STORE = 'https://play.google.com/store/apps/details?id=com.tripdedee';
+const APP_STORE  = 'https://apps.apple.com/th/app/tripdedee/id6742800000';
+
+let view = null;
+if (isPublic && hero) {
+  const s = hero.stats || {};
+  const name = hero.displayName || 'Hero';
+  const rating = s.avgRating
+    ? `⭐ ${Number(s.avgRating).toFixed(1)}${s.totalRatingCount ? ` (${s.totalRatingCount})` : ''}`
+    : '⭐ Hero ใหม่';
+  const tags = (hero.skillTags || []).slice(0, 8);
+  const portfolio = (hero.portfolioPhotos || []).filter(Boolean).slice(0, 12);
+  const ogImage = hero.photo || portfolio[0] || null;
+
+  // Short one-liner used as og:description + meta description. Falls back
+  // to a factual line when the Hero hasn't written an about yet.
+  const aboutOneLine = String(hero.about || '').replace(/\s+/g, ' ').trim();
+  const metaDesc = aboutOneLine
+    || `${name} · Hero บน TripDeDee${tags.length ? ' · ' + tags.slice(0, 3).map(t => '#' + t).join(' ') : ''}`;
+  const title = `${name} · Hero on TripDeDee`;
+
+  // Provinces + proof bits are shown as small chip row under the name.
+  const proofChips = [];
+  if (s.completedLast30d) proofChips.push(`${s.completedLast30d} งาน/เดือน`);
+  if (portfolio.length)    proofChips.push(`${portfolio.length} ผลงาน`);
+  if (hero.kyc?.verified)  proofChips.push('KYC ✓');
+
+  // JSON-LD — Person schema so search bots understand this is a
+  // professional profile, not a product page.
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Person',
+    name,
+    url: canonical,
+    image: ogImage || undefined,
+    description: metaDesc.slice(0, 300),
+    aggregateRating: s.totalRatingCount ? {
+      '@type': 'AggregateRating',
+      ratingValue: Number(s.avgRating).toFixed(1),
+      ratingCount: s.totalRatingCount,
+    } : undefined,
+  };
+
+  const socials = hero.socials || {};
+  const socialLinks = [
+    { key: 'facebook',  label: 'Facebook',  url: socials.facebook },
+    { key: 'tiktok',    label: 'TikTok',    url: socials.tiktok },
+    { key: 'instagram', label: 'Instagram', url: socials.instagram },
+    { key: 'youtube',   label: 'YouTube',   url: socials.youtube },
+    { key: 'linkedin',  label: 'LinkedIn',  url: socials.linkedin },
+    { key: 'website',   label: 'Website',   url: socials.website },
+  ].filter((x) => x.url && String(x.url).trim());
+
+  view = {
+    name, rating, tags, portfolio, ogImage, aboutOneLine, metaDesc, title,
+    proofChips, jsonLd, socialLinks,
+    promos: hero.promos || [],
+  };
+}
+
+const notFoundTitle = 'ไม่พบ Hero · TripDeDee';
+const notFoundDesc = 'โปรไฟล์ Hero นี้ไม่พร้อมใช้งาน · เปิดแอป TripDeDee เพื่อค้นหา Hero อื่น';
+---
+
+<ShopLayout
+  lang={lang}
+  title={view?.title || notFoundTitle}
+  description={view?.metaDesc || notFoundDesc}
+  ogImage={view?.ogImage || undefined}
+  canonical={canonical}
+  jsonLd={view?.jsonLd || undefined}
+  noindex={!isPublic}
+>
+  {!isPublic ? (
+    <main class="empty">
+      <h1>ไม่พบ Hero</h1>
+      <p>โปรไฟล์นี้ไม่พร้อมใช้งาน · หรือยังไม่ได้ตั้งค่า Hero</p>
+      <div class="stores">
+        <a href={APP_STORE} class="storeBtn">ดาวน์โหลด TripDeDee (iOS)</a>
+        <a href={PLAY_STORE} class="storeBtn">ดาวน์โหลด TripDeDee (Android)</a>
+      </div>
+    </main>
+  ) : (
+    <main>
+      <section class="hero" style={`background-image: linear-gradient(135deg, #7C3AED 0%, #3B82F6 100%);`}>
+        {view.portfolio[0] ? (
+          <img class="cover" src={view.portfolio[0]} alt={view.name} loading="eager" />
+        ) : null}
+        <div class="heroInner">
+          <div class="avatarWrap">
+            {view.ogImage ? (
+              <img class="avatar" src={view.ogImage} alt={view.name} loading="eager" />
+            ) : (
+              <div class="avatarFallback">👤</div>
+            )}
+          </div>
+          <h1 class="name">{view.name}</h1>
+          <p class="rating">{view.rating}</p>
+          {view.proofChips.length > 0 && (
+            <div class="proof">
+              {view.proofChips.map((c) => <span class="chip">{c}</span>)}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* Primary CTA — try deep-link, then reveal store buttons after ~2s.
+          Placed high so the ad-clicker→app-install funnel is short. */}
+      <section class="cta">
+        <a href={APP_SCHEME} id="openApp" class="btnPrimary">เปิดใน TripDeDee</a>
+        <div class="stores" id="stores">
+          <a href={APP_STORE} class="storeBtn">App Store</a>
+          <a href={PLAY_STORE} class="storeBtn">Google Play</a>
+        </div>
+        <p class="ctaNote" id="ctaNote">แตะ "เปิดใน TripDeDee" · ถ้ายังไม่มีแอป · ติดตั้งฟรี</p>
+      </section>
+
+      {view.aboutOneLine && (
+        <section class="card">
+          <h2>เกี่ยวกับ Hero</h2>
+          <p>{view.aboutOneLine}</p>
+        </section>
+      )}
+
+      {view.tags.length > 0 && (
+        <section class="card">
+          <h2>ทักษะ</h2>
+          <div class="tagRow">
+            {view.tags.map((t) => <span class="tag">#{t}</span>)}
+          </div>
+        </section>
+      )}
+
+      {view.portfolio.length > 0 && (
+        <section class="card">
+          <h2>ผลงาน</h2>
+          <div class="grid">
+            {view.portfolio.map((u) => (
+              <img src={u} alt="portfolio" loading="lazy" class="gridImg" />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {view.promos.length > 0 && (
+        <section class="card">
+          <h2>โปรโมท</h2>
+          {view.promos.map((p) => {
+            const hasPhotos = Array.isArray(p.photos) && p.photos.length > 0;
+            const evergreen = !p.expireAt;
+            const posted = new Date(p.createdAt).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' });
+            // Deterministic gradient per post id (matches the app card).
+            const grads = [
+              ['#7C3AED','#EC4899'], ['#F97316','#F59E0B'], ['#3B82F6','#06B6D4'],
+              ['#10B981','#059669'], ['#EF4444','#F97316'], ['#8B5CF6','#3B82F6'],
+              ['#EC4899','#F59E0B'],
+            ];
+            const s = String(p._id || '');
+            const h = [...s].reduce((a,c)=>(a*31+c.charCodeAt(0))>>>0, 5381);
+            const [g1, g2] = grads[h % grads.length];
+            const badge = evergreen
+              ? `<span class="badge ever">∞ ประจำ</span>`
+              : `<span class="badge time">📅 ${posted}</span>`;
+            return hasPhotos ? (
+              <article class="promo-ig">
+                <img src={p.photos[0]} alt="promo" loading="lazy" class="promo-ig-cover" />
+                <div class="promo-ig-body">
+                  <p class="promo-ig-txt">{p.text}</p>
+                  <div class="promo-row">
+                    <Fragment set:html={badge} />
+                  </div>
+                </div>
+              </article>
+            ) : (
+              <article class="promo-story" style={`background-image: linear-gradient(135deg, ${g1} 0%, ${g2} 100%);`}>
+                <span class="promo-story-emoji">💫</span>
+                <p class="promo-story-txt">{p.text}</p>
+                <div class="promo-row">
+                  <span class="badge light">{evergreen ? '∞ ประจำ' : `📅 ${posted}`}</span>
+                </div>
+              </article>
+            );
+          })}
+        </section>
+      )}
+
+      {view.socialLinks.length > 0 && (
+        <section class="card">
+          <h2>ช่องทางอื่น</h2>
+          <div class="socials">
+            {view.socialLinks.map((s) => (
+              <a class="socialBtn" href={s.url} target="_blank" rel="noopener noreferrer">
+                {s.label}
+              </a>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Sticky bottom CTA — always visible while user scrolls. */}
+      <a href={APP_SCHEME} class="stickyCta">เปิดใน TripDeDee</a>
+    </main>
+  )}
+</ShopLayout>
+
+{/* Deep-link auto-attempt — fires on load, then keeps the "stores"
+    section visible so users without the app have a clear install path.
+    document.hidden detection = the app opened → we don't need to nag. */}
+<script is:inline define:vars={{ APP_SCHEME, APP_STORE, PLAY_STORE }}>
+  (function() {
+    if (typeof window === 'undefined') return;
+    const ua = navigator.userAgent || '';
+    const isAndroid = /android/i.test(ua);
+    const isIOS = /iphone|ipad|ipod/i.test(ua);
+    if (!isAndroid && !isIOS) return; // desktop → let user click manually
+
+    let opened = false;
+    const onHide = () => { opened = true; };
+    document.addEventListener('visibilitychange', onHide);
+    window.addEventListener('pagehide', onHide);
+    window.addEventListener('blur', onHide);
+
+    // Fire the deep-link after a tick so the page paints first.
+    setTimeout(() => {
+      const iframe = document.createElement('iframe');
+      iframe.style.display = 'none';
+      iframe.src = APP_SCHEME;
+      document.body.appendChild(iframe);
+    }, 400);
+
+    // After 1.6s, if the app didn't open (page still visible), push the
+    // user to the correct store.
+    setTimeout(() => {
+      if (opened) return;
+      // Do NOT auto-redirect — that's aggressive and can nuke back-nav.
+      // Just make the fallback CTA impossible to miss.
+      const note = document.getElementById('ctaNote');
+      if (note) note.textContent = 'ยังไม่มีแอป? ติดตั้งฟรีด้านล่าง 👇';
+    }, 1600);
+  })();
+</script>
+
+<style>
+  main { max-width: 640px; margin: 0 auto; padding-bottom: 96px; }
+
+  .hero {
+    position: relative;
+    padding: 32px 20px 40px;
+    color: #fff;
+    text-align: center;
+    overflow: hidden;
+  }
+  .cover {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: cover; opacity: 0.35; z-index: 0;
+  }
+  .heroInner { position: relative; z-index: 1; }
+  .avatarWrap {
+    width: 108px; height: 108px; border-radius: 999px;
+    margin: 0 auto 14px;
+    padding: 4px;
+    background: rgba(255,255,255,0.25);
+    border: 3px solid #fff;
+    overflow: hidden;
+  }
+  .avatar { width: 100%; height: 100%; border-radius: 999px; object-fit: cover; }
+  .avatarFallback {
+    width: 100%; height: 100%; border-radius: 999px;
+    background: rgba(255,255,255,0.25);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 40px;
+  }
+  .name { font-size: 24px; font-weight: 900; margin: 0; letter-spacing: -0.5px; }
+  .rating { margin: 6px 0 0; font-size: 15px; opacity: 0.95; }
+  .proof { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 12px; }
+  .chip {
+    background: rgba(255,255,255,0.2);
+    padding: 4px 10px; border-radius: 999px;
+    font-size: 12px; font-weight: 700;
+  }
+
+  .cta {
+    margin: -20px 20px 0;
+    position: relative; z-index: 2;
+    background: #fff;
+    border-radius: 16px;
+    padding: 16px;
+    box-shadow: 0 8px 24px rgba(15,23,42,0.15);
+    text-align: center;
+  }
+  .btnPrimary {
+    display: block; width: 100%;
+    background: #1677FF; color: #fff;
+    padding: 14px 16px; border-radius: 12px;
+    font-weight: 900; font-size: 16px;
+    text-decoration: none;
+  }
+  .stores {
+    display: flex; gap: 8px; margin-top: 10px;
+  }
+  .storeBtn {
+    flex: 1;
+    background: #F1F5F9; color: #0F172A;
+    padding: 10px; border-radius: 10px;
+    font-weight: 700; font-size: 12px;
+    text-decoration: none;
+    text-align: center;
+  }
+  .ctaNote { color: #64748B; font-size: 11px; margin: 10px 0 0; }
+
+  .card {
+    background: #fff;
+    border: 1px solid #E2E8F0;
+    border-radius: 16px;
+    padding: 16px;
+    margin: 12px 20px;
+  }
+  .card h2 {
+    font-size: 12px; font-weight: 900;
+    text-transform: uppercase; letter-spacing: 0.6px;
+    color: #0F172A; margin: 0 0 10px;
+  }
+  .card p { margin: 0; font-size: 14px; line-height: 1.6; color: #0F172A; }
+
+  .tagRow { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tag {
+    background: #EFF6FF; color: #1677FF;
+    padding: 4px 10px; border-radius: 999px;
+    font-size: 12px; font-weight: 700;
+  }
+
+  .grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
+  }
+  .gridImg {
+    width: 100%; aspect-ratio: 1 / 1; object-fit: cover;
+    border-radius: 8px; background: #F1F5F9;
+  }
+
+  /* Gen Z promo cards · IG feed / Story feel */
+  .promo-ig {
+    border: 1px solid #E2E8F0; border-radius: 18px;
+    overflow: hidden; background: #fff; margin-bottom: 12px;
+  }
+  .promo-ig-cover {
+    width: 100%; aspect-ratio: 1.1 / 1; object-fit: cover; display: block;
+    background: #F1F5F9;
+  }
+  .promo-ig-body { padding: 14px; }
+  .promo-ig-txt { font-size: 15px; color: #0F172A; margin: 0 0 12px; line-height: 1.5; font-weight: 500; }
+
+  .promo-story {
+    border-radius: 18px; padding: 24px; margin-bottom: 12px;
+    min-height: 200px; color: #fff;
+    display: flex; flex-direction: column; justify-content: space-between;
+    box-shadow: 0 6px 20px rgba(15,23,42,0.15);
+  }
+  .promo-story-emoji { font-size: 28px; }
+  .promo-story-txt {
+    color: #fff; font-size: 22px; font-weight: 900;
+    line-height: 1.35; letter-spacing: -0.3px;
+    margin: 8px 0 12px; flex: 1;
+  }
+
+  .promo-row { display: flex; align-items: center; gap: 8px; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 4px 10px; border-radius: 999px;
+    font-size: 11px; font-weight: 800;
+  }
+  .badge.time  { background: #EFF6FF; color: #1677FF; }
+  .badge.ever  { background: #DCFCE7; color: #16A34A; }
+  .badge.light { background: rgba(255,255,255,0.28); color: #fff; }
+
+  .socials { display: flex; flex-wrap: wrap; gap: 8px; }
+  .socialBtn {
+    background: #EFF6FF; color: #1677FF;
+    padding: 10px 14px; border-radius: 999px;
+    font-weight: 700; font-size: 12px;
+    text-decoration: none;
+  }
+
+  .stickyCta {
+    position: fixed; left: 16px; right: 16px; bottom: 16px;
+    background: #1677FF; color: #fff;
+    padding: 14px; border-radius: 12px;
+    font-weight: 900; font-size: 15px;
+    text-decoration: none;
+    text-align: center;
+    box-shadow: 0 8px 24px rgba(22,119,255,0.4);
+    max-width: 608px; margin: 0 auto;
+  }
+
+  .empty {
+    padding: 60px 20px; text-align: center;
+  }
+  .empty h1 { font-size: 20px; color: #0F172A; margin: 0 0 8px; }
+  .empty p { color: #64748B; margin: 0 0 20px; }
+</style>

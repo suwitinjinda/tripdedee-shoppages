@@ -1,0 +1,174 @@
+---
+import { t } from '../lib/i18n.js';
+
+const { shop, lang } = Astro.props;
+const tr = t(lang);
+
+const phone = shop.phone && String(shop.phone).trim();
+const tel = phone ? phone.replace(/[^\d+]/g, '') : null;
+// Format Thai mobile: 0812345678 → 081 234 5678, landline 021234567 → 02 123 4567
+function fmtPhone(p) {
+  if (!p) return p;
+  const d = p.replace(/[^\d+]/g, '');
+  if (/^0[689]\d{8}$/.test(d)) return d.slice(0,3) + ' ' + d.slice(3,6) + ' ' + d.slice(6);
+  if (/^0[2-57]\d{7}$/.test(d)) return d.slice(0,2) + ' ' + d.slice(2,5) + ' ' + d.slice(5);
+  return p;
+}
+const phoneDisplay = fmtPhone(phone);
+const fbBlock = shop.fbContactBlock && shop.fbContactBlock.trim();
+const shopId = shop.shopId || String(shop._id || '');
+const isEn = lang === 'en';
+---
+
+{(phone || fbBlock) && (
+  <section class="border-t border-gray-100 px-5 py-5">
+    <h2 class="mb-2 text-lg font-bold text-gray-900">{tr.contact}</h2>
+    {fbBlock && (
+      <p class="mb-3 whitespace-pre-line text-[15px] leading-relaxed text-gray-700">{fbBlock}</p>
+    )}
+    {phone && (
+      <a
+        href={`tel:${tel}`}
+        class="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-5 py-3 text-base font-semibold text-white"
+      >
+        📞 โทร: {phoneDisplay}
+      </a>
+    )}
+
+    {/* ── Callback request button ── */}
+    {shopId && (
+      <button
+        id="cb-open-btn"
+        data-shop-id={shopId}
+        data-shop-name={shop.shopName || ''}
+        data-lang={lang}
+        class="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border-2 border-orange-400 bg-white px-5 py-3 text-base font-semibold text-orange-600 hover:bg-orange-50 active:scale-95 transition-transform"
+      >
+        💬 {isEn ? 'Request a callback' : 'ขอให้ร้านโทรกลับ'}
+      </button>
+    )}
+  </section>
+)}
+
+{/* ── Callback Modal ── */}
+{shopId && (
+  <dialog id="cb-dialog" class="w-full max-w-sm rounded-2xl p-0 shadow-2xl backdrop:bg-black/50">
+    <div class="p-5">
+      <div class="mb-4 flex items-start justify-between">
+        <div>
+          <h3 class="text-base font-bold text-gray-900">
+            {isEn ? 'Request a Callback' : 'ขอให้ร้านโทรกลับ'}
+          </h3>
+          <p class="text-sm text-gray-500" id="cb-shop-name"></p>
+        </div>
+        <button id="cb-close" class="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+      </div>
+
+      <div id="cb-form">
+        <input
+          id="cb-name"
+          type="text"
+          placeholder={isEn ? 'Your name *' : 'ชื่อ-สกุล *'}
+          class="mb-2 w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm focus:border-orange-400 focus:outline-none"
+        />
+        <input
+          id="cb-phone"
+          type="tel"
+          placeholder={isEn ? 'Phone number *' : 'เบอร์โทรที่ต้องการให้โทรกลับ *'}
+          class="mb-2 w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm focus:border-orange-400 focus:outline-none"
+        />
+        <input
+          id="cb-msg"
+          type="text"
+          placeholder={isEn ? 'Message (optional)' : 'ข้อความเพิ่มเติม (ถ้ามี)'}
+          class="mb-3 w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm focus:border-orange-400 focus:outline-none"
+        />
+        <p id="cb-err" class="hidden mb-2 text-xs text-red-500"></p>
+        <button
+          id="cb-submit"
+          class="w-full rounded-xl bg-orange-500 py-2.5 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-40"
+        >
+          {isEn ? 'Send Request' : 'ส่งคำขอ'}
+        </button>
+      </div>
+
+      <div id="cb-success" class="hidden text-center py-4">
+        <div class="text-4xl mb-3">📞</div>
+        <p class="font-bold text-gray-900">{isEn ? 'Request sent!' : 'ส่งคำขอแล้ว!'}</p>
+        <p class="mt-1 text-sm text-gray-500">
+          {isEn ? 'The shop will call you back shortly.' : 'ร้านจะโทรกลับหาคุณโดยเร็ว'}
+        </p>
+        <button id="cb-done" class="mt-4 w-full rounded-xl bg-gray-100 py-2.5 text-sm font-semibold text-gray-700">
+          {isEn ? 'Close' : 'ปิด'}
+        </button>
+      </div>
+    </div>
+  </dialog>
+)}
+
+<script>
+(function () {
+  const dlg      = document.getElementById('cb-dialog');
+  const openBtn  = document.getElementById('cb-open-btn');
+  if (!dlg || !openBtn) return;
+
+  const API = 'https://tripdedee.com/api';
+
+  openBtn.addEventListener('click', () => {
+    document.getElementById('cb-shop-name').textContent = openBtn.dataset.shopName || '';
+    document.getElementById('cb-name').value  = '';
+    document.getElementById('cb-phone').value = '';
+    document.getElementById('cb-msg').value   = '';
+    document.getElementById('cb-err').classList.add('hidden');
+    document.getElementById('cb-form').classList.remove('hidden');
+    document.getElementById('cb-success').classList.add('hidden');
+    const submitBtn = document.getElementById('cb-submit');
+    submitBtn.disabled = false;
+    submitBtn.textContent = openBtn.dataset.lang === 'en' ? 'Send Request' : 'ส่งคำขอ';
+    dlg.showModal();
+  });
+
+  document.getElementById('cb-close').addEventListener('click', () => dlg.close());
+  document.getElementById('cb-done').addEventListener('click',  () => dlg.close());
+  dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); });
+
+  document.getElementById('cb-submit').addEventListener('click', async () => {
+    const isEn    = openBtn.dataset.lang === 'en';
+    const name    = document.getElementById('cb-name').value.trim();
+    const phone   = document.getElementById('cb-phone').value.replace(/[-\s]/g, '').trim();
+    const message = document.getElementById('cb-msg').value.trim();
+    const errEl   = document.getElementById('cb-err');
+
+    if (!name)  { errEl.textContent = isEn ? 'Please enter your name' : 'กรุณากรอกชื่อ'; errEl.classList.remove('hidden'); return; }
+    if (!/^\d{9,10}$/.test(phone)) { errEl.textContent = isEn ? 'Invalid phone number' : 'กรุณากรอกเบอร์โทร 9-10 หลัก'; errEl.classList.remove('hidden'); return; }
+    errEl.classList.add('hidden');
+
+    const btn = document.getElementById('cb-submit');
+    btn.disabled = true;
+    btn.textContent = isEn ? 'Sending...' : 'กำลังส่ง...';
+
+    try {
+      const res = await fetch(`${API}/service/callback-request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shopId: openBtn.dataset.shopId, customerName: name, customerPhone: phone, message }),
+      });
+      const j = await res.json();
+      if (!j.success) {
+        errEl.textContent = j.message || (isEn ? 'Failed. Please try again.' : 'เกิดข้อผิดพลาด กรุณาลองใหม่');
+        errEl.classList.remove('hidden');
+        btn.disabled = false;
+        btn.textContent = isEn ? 'Send Request' : 'ส่งคำขอ';
+        return;
+      }
+      document.getElementById('cb-form').classList.add('hidden');
+      document.getElementById('cb-success').classList.remove('hidden');
+    } catch {
+      errEl.textContent = isEn ? 'Network error. Please try again.' : 'เกิดข้อผิดพลาด กรุณาลองใหม่';
+      errEl.classList.remove('hidden');
+      btn.disabled = false;
+      btn.textContent = isEn ? 'Send Request' : 'ส่งคำขอ';
+    }
+  });
+})();
+</script>

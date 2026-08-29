@@ -1,0 +1,21 @@
+---
+import HotelPage from '../../components/HotelPage.astro';
+import { getHotel } from '../../lib/api.js';
+import { extractShopId, makeParam, hotelPath } from '../../lib/slug.js';
+
+const raw = Astro.params.slug || '';
+const hotelId = extractShopId(raw);
+const hotel = await getHotel(hotelId);
+const isPublic = !!hotel;
+
+if (isPublic) {
+  // Redirect bare-id or stale-slug links to the canonical pretty URL.
+  if (raw !== makeParam(hotel.name, hotelId)) {
+    return Astro.redirect(hotelPath('th', hotel.name, hotelId), 301);
+  }
+} else {
+  Astro.response.status = 404;
+}
+---
+
+<HotelPage hotelId={hotelId} lang="th" hotel={hotel} isPublic={isPublic} />

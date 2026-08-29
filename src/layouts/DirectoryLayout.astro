@@ -1,0 +1,120 @@
+---
+// Shared shell for the Wongnai-style directory pages (home, search,
+// area/<province>, category/<type>). Reuses the same OG / font setup as
+// ShopLayout but advertises og:type=website and includes a top navbar with
+// a compact search bar.
+import '../styles/global.css';
+
+const {
+  lang = 'th',
+  title,
+  description,
+  canonical,
+  noindex = false,
+  searchQuery = '',
+  searchProvince = '',
+  searchType = '',
+  jsonLd,
+} = Astro.props;
+
+const desc = (description || '').slice(0, 300);
+// ไฟล์ /img/og-shop-directory.jpg ไม่มีอยู่จริง — ตรวจเมื่อ 23 ส.ค. 2569 ได้ 404
+// ทุกครั้งที่แชร์หน้ารวมร้านใน LINE/Facebook จึงไม่ขึ้นรูปมาตลอด
+// เปลี่ยนมาใช้โลโก้ซึ่งมีอยู่จริง (HTTP 200)
+// ถ้าจะทำรูป og เฉพาะกิจ ให้วางไฟล์ไว้ที่ public/ ของโปรเจกต์นี้ก่อน
+const ogImage = 'https://tripdedee.com/logo.png';
+---
+
+<!doctype html>
+<html lang={lang}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={desc} />
+    {noindex && <meta name="robots" content="noindex, follow" />}
+    {canonical && <link rel="canonical" href={canonical} />}
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={desc} />
+    {canonical && <meta property="og:url" content={canonical} />}
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:site_name" content="TripDeDee" />
+    <meta property="og:locale" content={lang === 'en' ? 'en_US' : 'th_TH'} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content={ogImage} />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;700;800&display=swap"
+      rel="stylesheet"
+    />
+
+    {jsonLd && (
+      <script
+        type="application/ld+json"
+        set:html={JSON.stringify(jsonLd)}
+      />
+    )}
+    {/* ไฟล์ /track.js ไม่เคยมีอยู่จริง — public/ ว่างเปล่าและไม่มีใน dist
+        ทุกหน้าที่ใช้ layout นี้จึงยิง 404 ทุกครั้งที่มีคนหรือ Googlebot เปิด
+        (log บน prod: 404 จาก /, /blog/, และหน้าร้านหลายหน้า)
+        เอา tag ออกไปก่อน · ถ้าจะทำ analytics จริงค่อยใส่สคริปต์ที่มีไฟล์รองรับ
+        เอาออกเมื่อ 23 ส.ค. 2569 */}
+  </head>
+  <body class="bg-gray-50 text-gray-900">
+    <header class="sticky top-0 z-30 border-b border-gray-200 bg-white/95 backdrop-blur">
+      <div class="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3">
+        <a href="/shop/" class="flex items-center gap-2 text-lg font-extrabold text-orange-600">
+          <img
+            src="https://tripdedee.com/logo.png"
+            alt="TripDeDee"
+            class="h-8 w-8 rounded-lg shadow-sm"
+            loading="eager"
+          />
+          <span class="hidden sm:inline">TripDeDee</span>
+          <span class="hidden text-sm font-bold text-gray-500 sm:inline">· ค้นหาร้าน</span>
+        </a>
+        <div class="flex-1">
+          <form action="/shop/search" method="get" class="flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5">
+            <svg class="h-4 w-4 shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              name="q"
+              type="text"
+              value={searchQuery}
+              placeholder="ค้นหาร้าน..."
+              class="flex-1 border-0 bg-transparent text-sm text-gray-900 placeholder-gray-400 outline-none"
+              autocomplete="off"
+            />
+            {searchProvince ? <input type="hidden" name="province" value={searchProvince} /> : null}
+            {searchType ? <input type="hidden" name="shopType" value={searchType} /> : null}
+          </form>
+        </div>
+        <a href="https://tripdedee.com" class="hidden text-sm font-medium text-gray-500 hover:text-orange-600 sm:inline">
+          กลับหน้าหลัก
+        </a>
+      </div>
+    </header>
+
+    <main class="mx-auto max-w-6xl px-4 py-6">
+      <slot />
+    </main>
+
+    <footer class="border-t border-gray-200 bg-white py-8 text-center text-sm text-gray-500">
+      <div class="mx-auto max-w-6xl px-4">
+        <p>
+          ขับเคลื่อนโดย <a href="https://tripdedee.com" class="font-bold text-orange-600">TripDeDee</a>
+          · ทุกร้านอัปเดตเมนู/รูปเองในแอปได้ฟรี
+        </p>
+        <p class="mt-2 text-xs text-gray-400">
+          <a href="/shop/" class="hover:text-orange-600">ค้นหาร้าน</a> ·
+          <a href="https://tripdedee.com/blog/" class="hover:text-orange-600">บทความ</a> ·
+          <a href="https://tripdedee.com/join/" class="hover:text-orange-600">สมัครร้านของคุณ</a>
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>

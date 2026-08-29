@@ -1,0 +1,119 @@
+---
+import '../styles/global.css';
+import { t } from '../lib/i18n.js';
+
+const {
+  lang = 'th',
+  title,
+  description,
+  ogImage,
+  canonical,
+  alternateUrl,
+  alternateLang,
+  jsonLd,
+  noindex = false,
+} = Astro.props;
+
+const tr = t(lang);
+const desc = (description || '').slice(0, 300);
+---
+
+<!doctype html>
+<html lang={tr.htmlLang}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={desc} />
+    {noindex && <meta name="robots" content="noindex, follow" />}
+    {canonical && <link rel="canonical" href={canonical} />}
+    {alternateUrl && (
+      <link rel="alternate" hreflang={alternateLang} href={alternateUrl} />
+    )}
+    {canonical && <link rel="alternate" hreflang={tr.htmlLang} href={canonical} />}
+
+    <meta property="og:type" content="business.business" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={desc} />
+    {canonical && <meta property="og:url" content={canonical} />}
+    {ogImage && (
+      <>
+        <meta property="og:image" content={ogImage} />
+        <meta property="og:image:secure_url" content={ogImage} />
+        <meta property="og:image:type" content="image/jpeg" />
+        <meta property="og:image:alt" content={title} />
+      </>
+    )}
+    <meta property="og:locale" content={tr.locale} />
+    <meta property="og:site_name" content="TripDeDee" />
+    <meta name="twitter:card" content="summary_large_image" />
+    {ogImage && <meta name="twitter:image" content={ogImage} />}
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+
+    {jsonLd && (
+      <script
+        type="application/ld+json"
+        set:html={JSON.stringify(jsonLd)}
+      />
+    )}
+    {/* ไฟล์ /track.js ไม่เคยมีอยู่จริง — public/ ว่างเปล่าและไม่มีใน dist
+        ทุกหน้าที่ใช้ layout นี้จึงยิง 404 ทุกครั้งที่มีคนหรือ Googlebot เปิด
+        (log บน prod: 404 จาก /, /blog/, และหน้าร้านหลายหน้า)
+        เอา tag ออกไปก่อน · ถ้าจะทำ analytics จริงค่อยใส่สคริปต์ที่มีไฟล์รองรับ
+        เอาออกเมื่อ 23 ส.ค. 2569 */}
+  </head>
+  <body class="bg-gray-50">
+    {/* Persistent search bar — pinned to the top of every shop page so
+        the customer can hop to another shop without back-buttoning to
+        the directory. Mirrors DirectoryLayout's header (same form action,
+        same field name) so the search experience is identical across
+        landing + detail. */}
+    <header class="sticky top-0 z-30 border-b border-gray-200 bg-white/95 backdrop-blur">
+      <div class="mx-auto flex max-w-3xl items-center gap-3 px-4 py-2.5">
+        <a href="/shop/" class="flex items-center gap-1.5 text-base font-extrabold text-orange-600 shrink-0" aria-label={lang === 'en' ? 'Shop directory' : 'หน้าค้นหาร้าน'}>
+          <img
+            src="https://tripdedee.com/logo.png"
+            alt="TripDeDee"
+            class="h-7 w-7 rounded-lg shadow-sm"
+            loading="eager"
+          />
+          <span class="hidden sm:inline text-sm">TripDeDee</span>
+        </a>
+        <form action="/shop/search" method="get" class="flex flex-1 items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5">
+          <svg class="h-4 w-4 shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <input
+            name="q"
+            type="text"
+            placeholder={lang === 'en' ? 'Search shops, food, services...' : 'ค้นหาร้าน อาหาร บริการ...'}
+            class="flex-1 border-0 bg-transparent text-sm text-gray-900 placeholder-gray-400 outline-none min-w-0"
+            autocomplete="off"
+          />
+        </form>
+      </div>
+    </header>
+
+    <main class="mx-auto max-w-3xl bg-white shadow-sm">
+      <slot />
+    </main>
+
+    <footer class="mx-auto max-w-3xl px-5 py-8 text-center text-sm text-gray-400">
+      {alternateUrl && (
+        <a href={alternateUrl} class="mb-3 inline-block text-gray-500 underline">
+          {alternateLang === 'en' ? 'English' : 'ภาษาไทย'}
+        </a>
+      )}
+      <p>
+        {tr.poweredBy}{' '}
+        <a href="https://tripdedee.com" class="font-medium text-orange-500">TripDeDee</a>
+      </p>
+    </footer>
+  </body>
+</html>

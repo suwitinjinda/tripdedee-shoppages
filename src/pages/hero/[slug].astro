@@ -1,0 +1,24 @@
+---
+// Hero public landing — https://tripdedee.com/hero/<userId>
+// SSR page that pairs a shareable OG preview with a deep-link that
+// opens the TripDeDee app if installed (fallback = Play/App Store).
+//
+// Route param `slug` — currently a raw userId (24-hex). The Hero
+// module has no slug field yet; if that lands later, this route can
+// mirror the shop/[slug].astro extractShopId() pattern.
+import HeroPage from '../../components/HeroPage.astro';
+import { getHero } from '../../lib/api.js';
+
+const raw = Astro.params.slug || '';
+// Accept plain 24-hex ObjectId only. Anything else is either garbage
+// (404) or a future pretty slug we haven't built yet.
+const userId = /^[a-f0-9]{24}$/i.test(raw) ? raw : null;
+const hero = userId ? await getHero(userId) : null;
+const isPublic = !!hero;
+
+if (!isPublic) {
+  Astro.response.status = 404;
+}
+---
+
+<HeroPage userId={userId || raw} lang="th" hero={hero} isPublic={isPublic} />

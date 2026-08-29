@@ -1,0 +1,28 @@
+---
+import ShopPage from '../../components/ShopPage.astro';
+import { getShop } from '../../lib/api.js';
+import { extractShopId, shopParam, shopHref } from '../../lib/slug.js';
+
+const raw = Astro.params.slug || '';
+const shopId = extractShopId(raw);
+const shop = await getShop(shopId);
+const isPublic = !!shop;
+
+if (isPublic) {
+  // Skip canonicalization when ?mode= is set, otherwise CF / browser
+  // cache the 301 and strip the query on subsequent hits. Same reasoning
+  // as the TH route — see [slug].astro.
+  //
+  // ใช้ Shop.slug ตัวเดียวกับหน้าไทย · ตัวระบุร้านจึงเป็นก้อนเดียวทั้งเว็บ
+  // ภาษาแยกด้วย /en/ ที่อยู่หน้า path อยู่แล้ว ไม่ต้องแยกที่ slug อีกชั้น
+  // (เดิมหน้าอังกฤษปั้น slug จากชื่ออังกฤษ + _id เต็ม คนละก้อนกับหน้าไทย)
+  const hasMode = Astro.url.searchParams.has('mode');
+  if (!hasMode && raw !== shopParam(shop)) {
+    return Astro.redirect(shopHref('en', shop), 302);
+  }
+} else {
+  Astro.response.status = 404;
+}
+---
+
+<ShopPage shopId={shopId} lang="en" shop={shop} isPublic={isPublic} />

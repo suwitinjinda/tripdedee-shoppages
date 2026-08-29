@@ -1,0 +1,421 @@
+---
+import ShopLayout from '../layouts/ShopLayout.astro';
+import Hero from './Hero.astro';
+import Gallery from './Gallery.astro';
+import About from './About.astro';
+import Hours from './Hours.astro';
+import LocationCard from './LocationCard.astro';
+import ContactCTA from './ContactCTA.astro';
+import MenuSection from './MenuSection.astro';
+import ServiceList from './ServiceList.astro';
+import ProductGrid from './ProductGrid.astro';
+import { getShopMenu, getShopProducts } from '../lib/api.js';
+import {
+  flavorOf,
+  schemaTypeOf,
+  sectionOrder,
+  splitMenuItems,
+  typeLabel,
+} from '../lib/shopType.js';
+import { t, pick } from '../lib/i18n.js';
+import { shopHref } from '../lib/slug.js';
+
+// shop + isPublic are resolved by the route page so it can set the 404 status.
+const { shopId, lang, shop, isPublic } = Astro.props;
+const tr = t(lang);
+
+const SITE = 'https://tripdedee.com';
+const thName = shop?.shopName || shopId;
+const enName = shop?.nameEn || shop?.shopName || shopId;
+// ที่อยู่มาตรฐานกับตัวสลับภาษา ใช้ slug ก้อนเดียวกัน ต่างแค่ /en/ ข้างหน้า
+const canonical = SITE + shopHref(lang, shop || { shopName: thName, shopId });
+const alternateUrl = SITE + shopHref(lang === 'en' ? 'th' : 'en', shop || { shopName: thName, shopId });
+const alternateLang = lang === 'en' ? 'th' : 'en';
+
+let view = null;
+if (isPublic) {
+  const [menu, products] = await Promise.all([
+    getShopMenu(shopId),
+    getShopProducts(shopId),
+  ]);
+  const { food, services } = splitMenuItems(menu);
+
+  const name = pick(shop.shopName, shop.nameEn, lang);
+  const description = pick(shop.description, shop.descriptionEn, lang);
+  const tLabel = typeLabel(shop, lang);
+  const flavor = flavorOf(shop);
+  const place = [shop.district, shop.province].filter(Boolean).join(', ');
+  const metaDesc =
+    (description && description.trim()) ||
+    `${name} — ${tLabel}${place ? (lang === 'en' ? ` in ${place}` : ` ${place}`) : ''}`;
+  // รูปสำรองตอนร้านยังไม่ได้อัปรูป (23 ส.ค. 2569)
+  //
+  // วัดบน prod: ร้านที่เปิดใช้งาน 1,867 ร้าน มีรูปแล้ว 1,680 (90%)
+  // อีก 187 ร้านไม่มีรูปเลย พอแชร์ลิงก์ใน LINE/Facebook จะขึ้นเป็นกล่องเปล่า
+  // ไม่มีภาพ ซึ่งคนกดน้อยกว่ามาก
+  //
+  // ใช้โลโก้แบรนด์ ดีกว่าปล่อยว่าง · og:image:alt ยังเป็นชื่อร้านเหมือนเดิม
+  //
+  // ห้ามใช้ /img/og-shop-directory.jpg — ตรวจแล้ว 404 (หน้ารวมร้านอ้างไฟล์นี้
+  // อยู่และแชร์แล้วไม่ขึ้นรูปมาตลอด · แก้ใน DirectoryLayout พร้อมกันแล้ว)
+  const OG_FALLBACK = 'https://tripdedee.com/logo.png';
+  const ogImage = (Array.isArray(shop.images) && shop.images.length && shop.images[0])
+    ? shop.images[0]
+    : OG_FALLBACK;
+
+  const available = { menu: food.length > 0, services: services.length > 0, products: products.length > 0 };
+  const sections = sectionOrder(flavor).filter((k) => available[k]);
+
+  const lat = shop.coordinates?.latitude;
+  const lng = shop.coordinates?.longitude;
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': schemaTypeOf(shop),
+    name,
+    description: metaDesc,
+    image: Array.isArray(shop.images) && shop.images.length ? shop.images : undefined,
+    telephone: shop.phone || undefined,
+    url: canonical,
+    address: {
+      '@type': 'PostalAddress',
+      streetAddress: shop.address || undefined,
+      addressLocality: shop.district || undefined,
+      addressRegion: shop.province || undefined,
+      addressCountry: 'TH',
+    },
+    geo:
+      lat != null && lng != null
+        ? { '@type': 'GeoCoordinates', latitude: lat, longitude: lng }
+        : undefined,
+    aggregateRating:
+      shop.totalReviews > 0
+        ? { '@type': 'AggregateRating', ratingValue: shop.averageRating, reviewCount: shop.totalReviews }
+        : undefined,
+  };
+
+  view = { name, description, tLabel, metaDesc, ogImage, food, services, products, sections, jsonLd, available };
+}
+---
+
+{!isPublic && (
+  <ShopLayout lang={lang} title={`${tr.notFoundTitle} | TripDeDee`} noindex>
+    <div class="px-5 py-20 text-center">
+      <h1 class="text-2xl font-bold text-gray-900">{tr.notFoundTitle}</h1>
+      <p class="mt-3 text-gray-500">{tr.notFoundBody}</p>
+      <a
+        href="/shop/"
+        class="mt-6 inline-block rounded-xl bg-orange-500 px-6 py-3 font-semibold text-white"
+      >
+        {tr.backHome}
+      </a>
+    </div>
+  </ShopLayout>
+)}
+
+{isPublic && view && (
+  <ShopLayout
+    lang={lang}
+    title={`${view.name} | ${view.tLabel} | TripDeDee`}
+    description={view.metaDesc}
+    ogImage={view.ogImage}
+    canonical={canonical}
+    alternateUrl={alternateUrl}
+    alternateLang={alternateLang}
+    jsonLd={view.jsonLd}
+  >
+    <Hero shop={shop} lang={lang} name={view.name} typeLabel={view.tLabel} />
+
+    {/* ปุ่มเข้าหน้าเมนู/สั่งของร้าน (29 ส.ค. 2569 · เจ้าของสั่ง)
+
+        หน้านี้โชว์รายการเมนูอยู่แล้วก็จริง แต่ดูได้อย่างเดียว กดสั่งไม่ได้
+        คนที่เปิดจากลิงก์ที่ร้านแชร์มาจึงไปต่อไม่ถูก · หน้า /f/<รหัส> คือหน้า
+        เมนูที่สั่งได้จริง ร้านใช้แปะในไลน์อยู่แล้ว
+
+        โชว์เฉพาะร้านที่มีของให้สั่งจริง — ร้านไดเรกทอรีที่ยังไม่มีเจ้าของยืนยัน
+        กดไปก็เจอหน้าเปล่า ไม่ต้องมีปุ่ม */}
+    {shop.shortCode && shop.importSource !== 'osm'
+      && (view.available.menu || view.available.products) && (
+      <section class="mx-auto mt-4 max-w-3xl px-5">
+        <a
+          href={`https://tripdedee.com/f/${encodeURIComponent(shop.shortCode)}`}
+          class="flex items-center justify-center gap-2 rounded-2xl bg-[#e2641c] px-5 py-3.5 text-base font-bold text-white"
+        >
+          {lang === 'en' ? 'See menu & order' : 'ดูเมนู · สั่งเลย'}
+        </a>
+      </section>
+    )}
+
+    {/* ร้านไดเรกทอรีที่นำเข้าจากข้อมูลสาธารณะ — ยังไม่มีเจ้าของยืนยัน
+        (ส.ค. 2569)
+
+        ต้องบอกให้ชัดว่าเรายังไม่ได้คุยกับเจ้าของร้าน ไม่งั้นหน้านี้จะดูเหมือน
+        ร้านที่สมัครเข้ามาเอง ซึ่งเป็นการอ้างชื่อเขาโดยไม่ได้ขอ
+
+        วางไว้ครึ่งบนของจอถัดจาก Hero เลย เพราะกลุ่มเป้าหมายคือเจ้าของร้านที่
+        ค้น Google เจอหน้าตัวเอง ต้องเห็นปุ่มเคลมภายในไม่กี่วินาที
+        ไม่ใช่ต้องเลื่อนหาท้ายหน้า
+
+        ODbL บังคับให้ให้เครดิต OpenStreetMap ตรงที่แสดงข้อมูล */}
+    {shop.importSource === 'osm' && (
+      <section class="mx-auto mt-4 max-w-3xl px-5">
+        <div class="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+          <p class="text-sm font-semibold text-amber-900">
+            ข้อมูลจากแหล่งสาธารณะ · เจ้าของร้านยังไม่ได้ยืนยัน
+          </p>
+          <p class="mt-1 text-sm leading-relaxed text-amber-800">
+            ชื่อ ที่อยู่ และพิกัดของร้านนี้มาจาก OpenStreetMap
+            ยังไม่ได้ตรวจสอบกับเจ้าของร้าน จึงยังจองคิวหรือสั่งผ่าน TripDeDee ไม่ได้
+          </p>
+
+          <div class="mt-3 flex flex-wrap gap-2">
+            <a
+              href={`tripdedee://shop-claim/${shopId}`}
+              id="claimShopBtn"
+              class="inline-block rounded-xl bg-amber-600 px-5 py-2.5 text-sm font-semibold text-white"
+            >
+              นี่ร้านของคุณ? เคลมฟรี
+            </a>
+            {shop.phone && (
+              <a
+                href={`tel:${String(shop.phone).replace(/[^0-9+]/g, '')}`}
+                class="inline-block rounded-xl border border-amber-300 bg-white px-5 py-2.5 text-sm font-semibold text-amber-800"
+              >
+                โทรหาร้าน {shop.phone}
+              </a>
+            )}
+            {shop.coordinates?.latitude && (
+              <a
+                href={`https://www.google.com/maps/search/?api=1&query=${shop.coordinates.latitude},${shop.coordinates.longitude}`}
+                target="_blank"
+                rel="noopener"
+                class="inline-block rounded-xl border border-amber-300 bg-white px-5 py-2.5 text-sm font-semibold text-amber-800"
+              >
+                นำทางไปร้าน
+              </a>
+            )}
+          </div>
+
+          <p class="mt-3 text-xs text-amber-700">
+            เจ้าของร้านยืนยันแล้วจะแก้ข้อมูล เพิ่มบริการ และรับจองคิวได้ทันที
+          </p>
+          {/* ต้องมีทางแจ้งลบจริง — ร้านที่ไม่อยากอยู่ในระบบต้องออกได้
+              ไม่งั้นการเอาชื่อเขามาแสดงกลายเป็นการอ้างโดยไม่มีทางปฏิเสธ */}
+          <p class="mt-1 text-xs text-amber-700">
+            ไม่ต้องการให้ร้านอยู่ในระบบ แจ้งลบได้ที่
+            <a href="mailto:support@tripdedee.com" class="ml-1 underline">support@tripdedee.com</a>
+          </p>
+          {/* ODbL บังคับให้ให้เครดิตตรงจุดที่แสดงข้อมูล */}
+          <p class="mt-2 text-xs text-amber-600">
+            ข้อมูลบางส่วน © ผู้ร่วมสร้าง
+            <a
+              href="https://www.openstreetmap.org/copyright"
+              target="_blank"
+              rel="noopener"
+              class="ml-1 underline"
+            >OpenStreetMap</a>
+            <span class="ml-1">เผยแพร่ภายใต้สัญญาอนุญาต ODbL</span>
+          </p>
+        </div>
+      </section>
+    )}
+    <Gallery images={shop.images} name={view.name} />
+    <About title={tr.about} text={view.description} />
+
+    {view.sections.map((s) =>
+      s === 'menu' ? (
+        <MenuSection items={view.food} lang={lang} />
+      ) : s === 'services' ? (
+        <ServiceList items={view.services} lang={lang} shopId={shopId} />
+      ) : (
+        <ProductGrid items={view.products} lang={lang} />
+      )
+    )}
+
+    <Hours shop={shop} lang={lang} />
+    <LocationCard shop={shop} lang={lang} />
+    <ContactCTA shop={shop} lang={lang} />
+
+    {/* Legacy button — explicit fallback for users who dismissed the smart banner */}
+    <div class="px-5 py-5">
+      <button
+        id="open-in-app-btn"
+        data-shop-id={shopId}
+        class="block w-full rounded-xl border border-gray-200 px-5 py-3 text-center text-sm font-medium text-gray-600 cursor-pointer bg-white"
+      >
+        {tr.viewOnApp}
+      </button>
+    </div>
+
+    {/* Smart banner — sticky at top on mobile. Hidden by default, shown after
+        the auto deep-link attempt fails (app not installed). Customer can
+        choose install vs continue browsing the SSR page. */}
+    <div
+      id="td-smart-banner"
+      data-shop-id={shopId}
+      data-store-ios="https://apps.apple.com/th/app/tripdedee/id6471583311"
+      data-store-android="https://play.google.com/store/apps/details?id=com.munmunback.tripdedee"
+      data-cta-ios={tr.smartBannerApple}
+      data-cta-android={tr.smartBannerPlay}
+      class="hidden fixed top-0 left-0 right-0 z-50 bg-white shadow-md border-b border-gray-200"
+      style="padding-top: env(safe-area-inset-top);"
+    >
+      <div class="flex items-center gap-3 px-3 py-2">
+        <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-orange-500 text-white text-xl font-bold">
+          🍱
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="truncate text-[13px] font-bold text-gray-900" id="td-smart-title">{tr.smartBannerInstall}</div>
+          <div class="truncate text-[11px] text-gray-500" id="td-smart-sub">{tr.smartBannerSub}</div>
+        </div>
+        <a
+          id="td-smart-cta"
+          href="#"
+          class="shrink-0 rounded-full bg-orange-500 px-3.5 py-2 text-[12px] font-bold text-white"
+        >…</a>
+        <button
+          id="td-smart-close"
+          aria-label={tr.smartBannerClose}
+          class="shrink-0 text-gray-400 text-2xl leading-none px-2"
+        >×</button>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        var SHOP_ID_ATTR = 'data-shop-id';
+        var banner = document.getElementById('td-smart-banner');
+        var btn = document.getElementById('open-in-app-btn');
+        var cta = document.getElementById('td-smart-cta');
+        var closeBtn = document.getElementById('td-smart-close');
+        if (!banner || !btn) return;
+
+        var shopId = banner.getAttribute(SHOP_ID_ATTR);
+        var storeIOS = banner.getAttribute('data-store-ios');
+        var storeAndroid = banner.getAttribute('data-store-android');
+        var ua = navigator.userAgent || '';
+        var isAndroid = /Android/i.test(ua);
+        var isIOS = /iPhone|iPad|iPod/i.test(ua);
+        var isMobile = isAndroid || isIOS;
+        // Forward the ?mode= QR-poster intent (takeaway|delivery) into the
+        // app's deep link so it lands on the right order tab. Also stash it
+        // for the install-then-return case so the user doesn't lose context
+        // after the App Store / Play Store round-trip.
+        var urlMode = (new URLSearchParams(location.search)).get('mode');
+        var modeSuffix = urlMode ? ('?mode=' + encodeURIComponent(urlMode)) : '';
+        var appUrl = 'tripdedee://shop/' + shopId + modeSuffix;
+        if (urlMode) {
+          try {
+            sessionStorage.setItem('td_pending_shop', JSON.stringify({
+              shopId: shopId, mode: urlMode, at: Date.now(),
+            }));
+          } catch (e) {}
+        }
+
+        // Suppress for 7 days after dismissal so visitors aren't pestered.
+        var DISMISS_KEY = 'td_smart_dismiss';
+        var DISMISS_TTL = 7 * 24 * 60 * 60 * 1000;
+        var dismissedAt = parseInt(localStorage.getItem(DISMISS_KEY) || '0', 10);
+        var dismissed = dismissedAt && Date.now() - dismissedAt < DISMISS_TTL;
+
+        // Desktop: button just goes to tripdedee.com (preserve existing behavior).
+        if (!isMobile) {
+          btn.addEventListener('click', function () {
+            window.location.href = 'https://tripdedee.com';
+          });
+          return;
+        }
+
+        var storeUrl = isIOS ? storeIOS : storeAndroid;
+
+        // Wire button (always available) → same auto-attempt + fallback flow.
+        function tryDeepLink(onMiss) {
+          var start = Date.now();
+          var fired = false;
+
+          function done(missed) {
+            if (fired) return;
+            fired = true;
+            document.removeEventListener('visibilitychange', onVis);
+            window.clearTimeout(timer);
+            if (missed && typeof onMiss === 'function') onMiss();
+          }
+          function onVis() {
+            // Page hidden = OS handed control to the app. Don't show banner.
+            if (document.hidden) done(false);
+          }
+
+          document.addEventListener('visibilitychange', onVis);
+          var timer = window.setTimeout(function () {
+            if (!document.hidden && Date.now() - start < 3000) done(true);
+          }, 1500);
+
+          // Trigger the deep link. Browser will either switch to the app
+          // (visibility flips) or do nothing visible (no app installed).
+          window.location.href = appUrl;
+        }
+
+        btn.addEventListener('click', function () {
+          tryDeepLink(function () {
+            // Button fallback = direct store redirect (legacy behavior).
+            window.location.href = storeUrl;
+          });
+        });
+
+        // Smart banner CTA — read SSR-injected label from data attrs
+        cta.setAttribute('href', storeUrl);
+        cta.textContent = isIOS
+          ? (banner.getAttribute('data-cta-ios') || 'Get iOS')
+          : (banner.getAttribute('data-cta-android') || 'Get Android');
+        cta.addEventListener('click', function () {
+          try { localStorage.setItem(DISMISS_KEY, String(Date.now())); } catch (e) {}
+        });
+        closeBtn.addEventListener('click', function () {
+          banner.style.display = 'none';
+          try { localStorage.setItem(DISMISS_KEY, String(Date.now())); } catch (e) {}
+        });
+
+        // Show what the user is trying to do (takeaway vs delivery) on the
+        // smart banner — keeps context across the App Store roundtrip even
+        // if iOS Safari doesn't restore the URL after install.
+        if (urlMode) {
+          var titleEl = document.getElementById('td-smart-title');
+          var subEl = document.getElementById('td-smart-sub');
+          if (titleEl) {
+            titleEl.textContent = urlMode === 'delivery'
+              ? (document.documentElement.lang === 'en'
+                  ? 'Install TripDeDee to get this shop delivered'
+                  : 'ติดตั้ง TripDeDee เพื่อสั่งให้ rider ส่งถึงบ้าน')
+              : (document.documentElement.lang === 'en'
+                  ? 'Install TripDeDee to order this shop for takeaway'
+                  : 'ติดตั้ง TripDeDee เพื่อสั่งร้านนี้กลับบ้าน');
+          }
+          if (subEl) {
+            subEl.textContent = document.documentElement.lang === 'en'
+              ? 'Re-open this page after install to continue'
+              : 'หลังติดตั้ง เปิดหน้านี้อีกครั้งเพื่อสั่งต่อ';
+          }
+        }
+
+        // Auto-attempt the deep link once on first paint, then branch on
+        // intent signal: QR-poster scans (urlMode is set) skip the soft
+        // banner and yank the user straight to the App Store / Play Store
+        // — these visitors have high purchase intent and the friction of
+        // a tap-the-banner step costs us installs. Direct/share visits
+        // (no urlMode) keep the soft banner so casual browsers can read
+        // the menu without being shoved into the store.
+        if (!dismissed) {
+          tryDeepLink(function () {
+            if (urlMode) {
+              // High-intent QR scan: skip banner, redirect immediately.
+              window.location.href = storeUrl;
+              return;
+            }
+            // Casual visit: show the banner instead.
+            banner.classList.remove('hidden');
+            document.body.style.paddingTop = '64px';
+          });
+        }
+      })();
+    </script>
+  </ShopLayout>
+)}

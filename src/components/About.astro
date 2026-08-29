@@ -1,0 +1,10 @@
+---
+const { title, text } = Astro.props;
+---
+
+{text && text.trim() && (
+  <section class="border-t border-gray-100 px-5 py-5">
+    <h2 class="mb-2 text-lg font-bold text-gray-900">{title}</h2>
+    <p class="whitespace-pre-line text-[15px] leading-relaxed text-gray-700">{text}</p>
+  </section>
+)}

@@ -1,0 +1,33 @@
+---
+import ShopPage from '../components/ShopPage.astro';
+import { getShop } from '../lib/api.js';
+import { extractShopId, shopParam, shopHref } from '../lib/slug.js';
+
+const raw = Astro.params.slug || '';
+const shopId = extractShopId(raw);
+const shop = await getShop(shopId);
+const isPublic = !!shop;
+
+if (isPublic) {
+  // Redirect bare-id or stale-slug links to the canonical pretty URL.
+  //
+  // 1. Skip the canonicalization entirely when ?mode= is set — QR posters
+  //    point at the bare-id form, and we don't want a cached 301 round-trip
+  //    to lose the query string (Cloudflare + browser both cache 301s by
+  //    default; that's how the production bug presented).
+  //
+  // 2. When we do redirect, use 302 so CF / browser don't cache it.
+  //    301s for HTML SEO get hit anyway by the regular canonical URL.
+  //
+  // 3. ที่อยู่มาตรฐานคือ Shop.slug ที่หลังบ้านเก็บไว้ ไม่ใช่ที่หน้านี้ปั้นเอง
+  //    ลิงก์เก่าที่พา _id เต็มมา จะถูกเด้งไปที่ตัวสั้นให้เอง
+  const hasMode = Astro.url.searchParams.has('mode');
+  if (!hasMode && raw !== shopParam(shop)) {
+    return Astro.redirect(shopHref('th', shop), 302);
+  }
+} else {
+  Astro.response.status = 404;
+}
+---
+
+<ShopPage shopId={shopId} lang="th" shop={shop} isPublic={isPublic} />
