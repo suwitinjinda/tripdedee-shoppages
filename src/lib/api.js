@@ -127,3 +127,33 @@ export async function getShoppingProduct(productId) {
   if (!json || json.notFound || json.success === false) return null;
   return json.data || null;
 }
+
+// ── หน้า "เมนู × จังหวัด" (27 ต.ค. 2569) ──
+//
+// รายการเมนู (ชื่อไทย/อังกฤษ/slug) กับการจับเมนูอยู่ที่หลังบ้านที่เดียว
+// (services/publicFoodDishes.js) · หน้านี้ไม่เก็บสำเนา จะได้ไม่เพี้ยนจากกัน
+// หลังบ้านตอบ 404 เมื่อร้านไม่ถึงเกณฑ์ (หน้าบาง) → คืน null ให้หน้าตอบ 404 ตาม
+
+/** { minShops, dishes:[{slug, th, en, total, provinces:[{province,count}]}] } */
+export async function getFoodDishes() {
+  const json = await getCached('/shop/food/dishes');
+  if (!json || json.notFound || json.success === false || !json.data) return { minShops: 2, dishes: [] };
+  return { minShops: Number(json.data.minShops) || 2, dishes: Array.isArray(json.data.dishes) ? json.data.dishes : [] };
+}
+
+/** ร้านของเมนูหนึ่ง · province ว่าง = ทั้งประเทศ · null = ไม่มีหน้านี้ */
+export async function getFoodDishPage(dish, province = '') {
+  const qs = new URLSearchParams({ dish: String(dish || '') });
+  if (province) qs.set('province', String(province));
+  const json = await getCached(`/shop/food?${qs.toString()}`);
+  if (!json || json.notFound || json.success === false) return null;
+  return json.data || null;
+}
+
+/** เมนูที่ร้านนี้มี + ลิงก์ไปหน้าไหนได้จริง · หลังบ้านยังไม่มีเส้นนี้ก็ได้ [] */
+export async function getShopDishes(shopKey) {
+  if (!shopKey) return [];
+  const json = await getCached(`/shop/food/by-shop/${encodeURIComponent(shopKey)}`);
+  if (!json || json.notFound || json.success === false) return [];
+  return Array.isArray(json.data) ? json.data : [];
+}

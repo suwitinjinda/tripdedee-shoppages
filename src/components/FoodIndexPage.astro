@@ -1,0 +1,64 @@
+---
+// /shop/food — รวมเมนูทุกเมนูที่มีร้านถึงเกณฑ์ (27 ต.ค. 2569)
+// หน้าศูนย์กลางของหน้า "เมนู × จังหวัด" ให้ Google/AI ไล่ลิงก์ถึงทุกหน้าได้
+import DirectoryLayout from '../layouts/DirectoryLayout.astro';
+import { foodHref, dishLabel } from '../lib/food.js';
+
+const { all, lang = 'th' } = Astro.props;
+const en = lang === 'en';
+const SITE = 'https://tripdedee.com';
+const dishes = [...(all.dishes || [])].sort((a, b) => b.total - a.total);
+const canonical = SITE + (en ? '/shop/en/food' : '/shop/food');
+const alternateUrl = SITE + (en ? '/shop/food' : '/shop/en/food');
+const nf = (n) => Number(n || 0).toLocaleString(en ? 'en-US' : 'th-TH');
+const title = en ? 'Thai food by dish · shops with real menus & prices | TripDeDee'
+                 : 'ร้านอาหารแยกตามเมนู · ร้านจริงพร้อมเมนูและราคา | TripDeDee';
+const description = en
+  ? `Find shops on TripDeDee by dish — ${dishes.slice(0, 6).map((d) => d.en).join(', ')} and more, by province, with menu items and prices from each shop.`
+  : `หาร้านตามเมนูที่อยากกิน — ${dishes.slice(0, 6).map((d) => d.th).join(' ')} และอื่น ๆ แยกตามจังหวัด พร้อมชื่อเมนูและราคาจากร้านจริงบน TripDeDee`;
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'CollectionPage',
+  name: en ? 'Food by dish' : 'ร้านอาหารแยกตามเมนู',
+  url: canonical,
+  inLanguage: en ? 'en' : 'th',
+  mainEntity: {
+    '@type': 'ItemList',
+    numberOfItems: dishes.length,
+    itemListElement: dishes.map((d, i) => ({ '@type': 'ListItem', position: i + 1, name: dishLabel(d, lang), url: SITE + foodHref(lang, d.slug) })),
+  },
+};
+---
+
+<DirectoryLayout lang={lang} title={title} description={description} canonical={canonical} alternateUrl={alternateUrl} alternateLang={en ? 'th' : 'en'} jsonLd={jsonLd}>
+  <nav class="mb-3 text-xs text-gray-500">
+    <a href="/shop/" class="hover:text-orange-600">{en ? 'All shops' : 'ทุกร้าน'}</a> ›
+    <span class="text-gray-700">{en ? 'Food' : 'เมนูอาหาร'}</span>
+  </nav>
+  <h1 class="mb-2 text-2xl font-extrabold text-gray-900">{en ? 'Food by dish' : 'ร้านอาหารแยกตามเมนู'}</h1>
+  <p class="mb-5 text-sm text-gray-600">{description}</p>
+  {dishes.length === 0 ? (
+    <p class="rounded-2xl border border-dashed border-gray-300 bg-white px-6 py-12 text-center text-gray-500">{en ? 'No dishes yet' : 'ยังไม่มีข้อมูล'}</p>
+  ) : (
+    <ul class="grid gap-3 sm:grid-cols-2">
+      {dishes.map((d) => (
+        <li class="rounded-2xl border border-gray-200 bg-white p-3 shadow-sm">
+          <a href={foodHref(lang, d.slug)} class="text-[15px] font-bold text-gray-900 hover:text-orange-600">
+            {en ? d.en : `ร้าน${d.th}`}
+          </a>
+          <span class="ml-1 text-xs text-gray-500">{nf(d.total)} {en ? 'shops' : 'ร้าน'}</span>
+          {d.provinces && d.provinces.length > 0 && (
+            <p class="mt-1.5 flex flex-wrap gap-x-2 gap-y-1 text-xs">
+              {d.provinces.slice(0, 6).map((p) => (
+                <a href={foodHref(lang, d.slug, p.province)} class="text-orange-700 hover:underline">{p.province} ({nf(p.count)})</a>
+              ))}
+            </p>
+          )}
+        </li>
+      ))}
+    </ul>
+  )}
+  <p class="mt-8 text-center text-sm">
+    <a href={alternateUrl.replace(SITE, '')} class="text-gray-500 underline">{en ? 'ภาษาไทย' : 'English'}</a>
+  </p>
+</DirectoryLayout>

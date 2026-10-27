@@ -1,0 +1,7 @@
+---
+import FoodIndexPage from '../../components/FoodIndexPage.astro';
+import { getFoodDishes } from '../../lib/api.js';
+const all = await getFoodDishes();
+if (!all.dishes.length) Astro.response.status = 404;
+---
+<FoodIndexPage all={all} lang="th" />

@@ -1,0 +1,245 @@
+---
+// หน้า "ร้าน<เมนู>" ทั้งประเทศ และ "ร้าน<เมนู>ใน<จังหวัด>" (27 ต.ค. 2569)
+//
+// เจ้าของ: คนถาม ChatGPT/Google ว่า "ข้าวต้ม ใกล้ฉัน" / "ร้านอาหารเหนือ เชียงใหม่" ต้องเจอร้านจริง
+// ทุกอย่างบนหน้ามาจากหลังบ้าน (services/publicFoodDishes.js) — ชื่อเมนูกับราคาเป็นของร้านจริง
+// ไม่มีเรตติ้งแต่ง ไม่มีตัวเลขเดา · หน้าที่ร้านไม่ถึงเกณฑ์ไม่ถึงตรงนี้ (route ตอบ 404 ไปแล้ว)
+import DirectoryLayout from '../layouts/DirectoryLayout.astro';
+import { shopHref } from '../lib/slug.js';
+import { typeLabel } from '../lib/shopType.js';
+import { foodHref, dishLabel } from '../lib/food.js';
+
+const { page, all, lang = 'th' } = Astro.props;
+const en = lang === 'en';
+const SITE = 'https://tripdedee.com';
+const dish = page.dish;
+const label = dishLabel(dish, lang);
+const province = page.province || '';
+const total = Number(page.total) || 0;
+const shops = page.shops || [];
+const otherLang = en ? 'th' : 'en';
+const canonical = SITE + foodHref(lang, dish.slug, province);
+const alternateUrl = SITE + foodHref(otherLang, dish.slug, province);
+const nf = (n) => Number(n || 0).toLocaleString(en ? 'en-US' : 'th-TH');
+const baht = (n) => '฿' + Number(n || 0).toLocaleString('en-US');
+
+// จังหวัดอื่นที่มีเมนูนี้ (ถึงเกณฑ์) · เมนูอื่นในจังหวัดนี้ (ถึงเกณฑ์)
+const dishRow = (all.dishes || []).find((d) => d.slug === dish.slug);
+const provinces = province ? (dishRow?.provinces || []) : (page.provinces || []);
+const otherDishesHere = province
+  ? (all.dishes || [])
+      .filter((d) => d.slug !== dish.slug)
+      .map((d) => ({ d, hit: (d.provinces || []).find((p) => p.province === province) }))
+      .filter((x) => x.hit)
+      .sort((a, b) => b.hit.count - a.hit.count)
+  : [];
+const nProvinces = province ? 0 : provinces.length;
+
+const heading = province
+  ? (en ? `${label} in ${province}` : `ร้าน${label} ${province}`)
+  : (en ? `${label} — shops across Thailand` : `ร้าน${label} ทั่วไทย`);
+const title = province
+  ? (en ? `${label} in ${province} · ${nf(total)} shops with menus & prices | TripDeDee`
+        : `ร้าน${label} ${province} · ${nf(total)} ร้าน พร้อมเมนูและราคา | TripDeDee`)
+  : (en ? `${label} · ${nf(total)} shops in Thailand with menus & prices | TripDeDee`
+        : `ร้าน${label} · ${nf(total)} ร้านทั่วไทย พร้อมเมนูและราคา | TripDeDee`);
+const sampleNames = shops.slice(0, 3).map((s) => (en ? s.nameEn || s.shopName : s.shopName)).filter(Boolean);
+const description = province
+  ? (en
+      ? `${nf(total)} shops in ${province} on TripDeDee with ${label} on their menu${sampleNames.length ? `, including ${sampleNames.join(', ')}` : ''}. See menu items, prices and location.`
+      : `รวม ${nf(total)} ร้านใน${province}ที่มีเมนู${label}บน TripDeDee${sampleNames.length ? ` เช่น ${sampleNames.join(', ')}` : ''} — ดูชื่อเมนู ราคาจากร้าน และที่ตั้ง`)
+  : (en
+      ? `${nf(total)} shops on TripDeDee with ${label} on their menu${nProvinces ? ` in ${nf(nProvinces)} provinces` : ''}. Pick a province to see shops, menu items and prices.`
+      : `รวม ${nf(total)} ร้านที่มีเมนู${label}บน TripDeDee${nProvinces ? ` ใน ${nf(nProvinces)} จังหวัด` : ''} — เลือกจังหวัดเพื่อดูร้าน ชื่อเมนู และราคา`);
+
+const crumbs = [
+  { name: en ? 'All shops' : 'ทุกร้าน', url: SITE + (en ? '/shop/' : '/shop/') },
+  { name: en ? 'Food' : 'เมนูอาหาร', url: SITE + (en ? '/shop/en/food' : '/shop/food') },
+  { name: label, url: SITE + foodHref(lang, dish.slug) },
+  ...(province ? [{ name: province, url: canonical }] : []),
+];
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'CollectionPage',
+      '@id': canonical + '#page',
+      name: heading,
+      url: canonical,
+      inLanguage: en ? 'en' : 'th',
+      description,
+      about: province
+        ? { '@type': 'Place', name: province, address: { '@type': 'PostalAddress', addressRegion: province, addressCountry: 'TH' } }
+        : undefined,
+      mainEntity: { '@id': canonical + '#shops' },
+      breadcrumb: { '@id': canonical + '#breadcrumb' },
+    },
+    {
+      '@type': 'BreadcrumbList',
+      '@id': canonical + '#breadcrumb',
+      itemListElement: crumbs.map((c, i) => ({ '@type': 'ListItem', position: i + 1, name: c.name, item: c.url })),
+    },
+    {
+      '@type': 'ItemList',
+      '@id': canonical + '#shops',
+      name: heading,
+      numberOfItems: total,
+      itemListElement: shops.map((s, i) => ({
+        '@type': 'ListItem',
+        position: i + 1,
+        url: SITE + shopHref(lang, s),
+        name: en ? s.nameEn || s.shopName : s.shopName,
+      })),
+    },
+  ],
+};
+---
+
+<DirectoryLayout
+  lang={lang}
+  title={title}
+  description={description}
+  canonical={canonical}
+  alternateUrl={alternateUrl}
+  alternateLang={otherLang}
+  jsonLd={jsonLd}
+>
+  <nav class="mb-3 text-xs text-gray-500" aria-label={en ? 'Breadcrumb' : 'เส้นทาง'}>
+    <a href="/shop/" class="hover:text-orange-600">{crumbs[0].name}</a> ›
+    <a href={en ? '/shop/en/food' : '/shop/food'} class="hover:text-orange-600">{crumbs[1].name}</a> ›
+    {province ? (
+      <>
+        <a href={foodHref(lang, dish.slug)} class="hover:text-orange-600">{label}</a> ›
+        <span class="text-gray-700">{province}</span>
+      </>
+    ) : (
+      <span class="text-gray-700">{label}</span>
+    )}
+  </nav>
+
+  <div class="mb-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+    <h1 class="text-2xl font-extrabold text-gray-900">{heading}</h1>
+    <span class="text-sm text-gray-500">{nf(total)} {en ? 'shops' : 'ร้าน'}</span>
+  </div>
+  <p class="mb-5 text-sm leading-relaxed text-gray-600">{description}</p>
+
+  {!province && provinces.length > 0 && (
+    <section class="mb-6" aria-label={en ? 'By province' : 'เลือกจังหวัด'}>
+      <h2 class="mb-2 text-base font-bold text-gray-900">{en ? `${label} by province` : `ร้าน${label}แยกตามจังหวัด`}</h2>
+      <ul class="flex flex-wrap gap-2">
+        {provinces.map((p) => (
+          <li>
+            <a href={foodHref(lang, dish.slug, p.province)} class="inline-block rounded-full border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-700 hover:border-orange-300 hover:text-orange-700">
+              {p.province} <span class="text-gray-400">({nf(p.count)})</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )}
+
+  {!province && (
+    <h2 class="mb-3 text-base font-bold text-gray-900">{en ? `Shops with ${label}` : `ร้านที่มีเมนู${label}`}</h2>
+  )}
+
+  <ol class="grid gap-3 sm:grid-cols-2">
+    {shops.map((s) => {
+      const name = en ? s.nameEn || s.shopName : s.shopName;
+      const area = [s.district, s.province].filter(Boolean).join(', ');
+      return (
+        <li class="rounded-2xl border border-gray-200 bg-white p-3 shadow-sm">
+          <div class="flex gap-3">
+            {s.image ? (
+              <img src={s.image} alt={name} loading="lazy" class="h-16 w-16 shrink-0 rounded-xl bg-gray-100 object-cover" />
+            ) : (
+              <div class="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-2xl text-gray-300">🍽</div>
+            )}
+            <div class="min-w-0 flex-1">
+              <h3 class="text-[15px] font-bold leading-snug text-gray-900">
+                <a href={shopHref(lang, s)} class="hover:text-orange-600">{name}</a>
+              </h3>
+              <p class="mt-0.5 text-xs text-gray-500">
+                {typeLabel(s, lang)}{area ? ` · ${area}` : ''}
+              </p>
+            </div>
+          </div>
+
+          {s.items && s.items.length > 0 ? (
+            <ul class="mt-2 divide-y divide-gray-100 text-sm" aria-label={en ? `${label} menu items` : `เมนู${label}ของร้าน`}>
+              {s.items.map((it) => (
+                <li class="flex items-baseline justify-between gap-3 py-1.5">
+                  <span class="min-w-0 text-gray-800">{en ? it.nameEn || it.name : it.name}</span>
+                  <span class="shrink-0 font-bold text-orange-600">{baht(it.price)}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p class="mt-2 text-xs text-gray-500">{en ? `Shop name mentions ${label}` : `ชื่อร้านมีคำว่า${label}`}</p>
+          )}
+          {s.matchedCount > (s.items || []).length && (
+            <p class="mt-1 text-xs text-gray-400">
+              {en ? `+${nf(s.matchedCount - s.items.length)} more on the menu` : `และอีก ${nf(s.matchedCount - s.items.length)} รายการในเมนูร้าน`}
+            </p>
+          )}
+
+          <div class="mt-3 flex gap-2">
+            <a href={shopHref(lang, s)} class="flex-1 rounded-xl border border-gray-200 px-3 py-2 text-center text-sm font-semibold text-gray-700 hover:border-orange-300">
+              {en ? 'Shop page' : 'ดูหน้าร้าน'}
+            </a>
+            {s.shortCode && (
+              <a href={`https://tripdedee.com/f/${encodeURIComponent(s.shortCode)}`} class="flex-1 rounded-xl bg-[#e2641c] px-3 py-2 text-center text-sm font-bold text-white">
+                {en ? 'See menu & order' : 'ดูเมนู · สั่งเลย'}
+              </a>
+            )}
+          </div>
+        </li>
+      );
+    })}
+  </ol>
+
+  {total > shops.length && (
+    <p class="mt-4 text-center text-sm text-gray-500">
+      {en ? `Showing ${nf(shops.length)} of ${nf(total)} shops` : `แสดง ${nf(shops.length)} จาก ${nf(total)} ร้าน`}
+    </p>
+  )}
+
+  {province && provinces.length > 1 && (
+    <section class="mt-8">
+      <h2 class="mb-2 text-base font-bold text-gray-900">{en ? `${label} in other provinces` : `ร้าน${label}จังหวัดอื่น`}</h2>
+      <ul class="flex flex-wrap gap-2">
+        {provinces.filter((p) => p.province !== province).map((p) => (
+          <li>
+            <a href={foodHref(lang, dish.slug, p.province)} class="inline-block rounded-full border border-gray-200 bg-white px-3 py-1 text-sm text-gray-700 hover:border-orange-300">
+              {p.province} <span class="text-gray-400">({nf(p.count)})</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )}
+
+  {otherDishesHere.length > 0 && (
+    <section class="mt-6">
+      <h2 class="mb-2 text-base font-bold text-gray-900">{en ? `More food in ${province}` : `เมนูอื่นใน${province}`}</h2>
+      <ul class="flex flex-wrap gap-2">
+        {otherDishesHere.map(({ d, hit }) => (
+          <li>
+            <a href={foodHref(lang, d.slug, province)} class="inline-block rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-sm text-orange-700 hover:border-orange-400">
+              {dishLabel(d, lang)} <span class="text-orange-400">({nf(hit.count)})</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+      <p class="mt-3 text-sm">
+        <a href={`/shop/area/${encodeURIComponent(province)}`} class="text-orange-600 underline">
+          {en ? `All shops in ${province}` : `ร้านทั้งหมดในจังหวัด${province}`}
+        </a>
+      </p>
+    </section>
+  )}
+
+  <p class="mt-8 text-center text-sm">
+    <a href={alternateUrl.replace(SITE, '')} class="text-gray-500 underline">{en ? 'ภาษาไทย' : 'English'}</a>
+  </p>
+</DirectoryLayout>

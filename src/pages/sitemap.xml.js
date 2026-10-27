@@ -1,4 +1,5 @@
-import { getActiveShops, getShoppingProducts } from '../lib/api.js';
+import { getActiveShops, getShoppingProducts, getFoodDishes } from '../lib/api.js';
+import { foodHref } from '../lib/food.js';
 import { shopHref } from '../lib/slug.js';
 
 const SITE = 'https://tripdedee.com';
@@ -31,6 +32,21 @@ export async function GET() {
       if (pid) locs.push(`${SITE}/shop/shopping/product/${pid}`);
     }
   } catch (_) { /* ไม่ให้สินค้าล้มทั้ง sitemap */ }
+
+  // หน้า "เมนู × จังหวัด" (27 ต.ค. 2569) · หลังบ้านคืนเฉพาะเมนู/จังหวัดที่มีร้านถึงเกณฑ์ (≥2)
+  // จึงไม่มีหน้าบางหรือหน้า 404 หลุดเข้า sitemap · ดึงไม่ได้ก็ข้ามไป
+  try {
+    const { dishes } = await getFoodDishes();
+    if (dishes.length) {
+      locs.push(`${SITE}/shop/food`, `${SITE}/shop/en/food`);
+      for (const d of dishes) {
+        for (const lang of ['th', 'en']) {
+          locs.push(SITE + foodHref(lang, d.slug));
+          for (const p of d.provinces || []) locs.push(SITE + foodHref(lang, d.slug, p.province));
+        }
+      }
+    }
+  } catch (_) { /* ไม่ให้หน้าเมนูล้มทั้ง sitemap */ }
 
   const body =
     '<?xml version="1.0" encoding="UTF-8"?>\n' +

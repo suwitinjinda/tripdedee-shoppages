@@ -1,0 +1,27 @@
+---
+// /shop/food/<เมนู> · ดู components/FoodDishPage.astro (27 ต.ค. 2569)
+import FoodDishPage from '../../../components/FoodDishPage.astro';
+import ShopLayout from '../../../layouts/ShopLayout.astro';
+import { loadFoodPage } from '../../../lib/foodPage.js';
+import { t } from '../../../lib/i18n.js';
+
+const lang = 'th';
+const tr = t(lang);
+const r = await loadFoodPage(Astro.params, lang);
+if (r.redirect) return Astro.redirect(r.redirect, 302);
+if (r.status === 404) Astro.response.status = 404;
+---
+
+{r.page ? (
+  <FoodDishPage page={r.page} all={r.all} lang={lang} />
+) : (
+  <ShopLayout lang={lang} title={`${tr.notFoundTitle} | TripDeDee`} noindex>
+    <div class="px-5 py-20 text-center">
+      <h1 class="text-2xl font-bold text-gray-900">{lang === 'en' ? 'Not enough shops yet' : 'ยังมีร้านไม่พอสำหรับหน้านี้'}</h1>
+      <p class="mt-3 text-gray-500">{lang === 'en' ? 'Try another dish or province.' : 'ลองเลือกเมนูหรือจังหวัดอื่น'}</p>
+      <a href={lang === 'en' ? '/shop/en/food' : '/shop/food'} class="mt-6 inline-block rounded-xl bg-orange-500 px-6 py-3 font-semibold text-white">
+        {lang === 'en' ? 'All dishes' : 'ดูเมนูทั้งหมด'}
+      </a>
+    </div>
+  </ShopLayout>
+)}

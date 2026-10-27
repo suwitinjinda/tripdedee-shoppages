@@ -15,6 +15,9 @@ const {
   searchProvince = '',
   searchType = '',
   jsonLd,
+  // หน้าที่มีสองภาษา (เช่น /shop/food/…) ส่งที่อยู่ของอีกภาษามาด้วย · ไม่ส่ง = เหมือนเดิม
+  alternateUrl = '',
+  alternateLang = '',
 } = Astro.props;
 
 const desc = (description || '').slice(0, 300);
@@ -34,6 +37,8 @@ const ogImage = 'https://tripdedee.com/logo.png';
     <meta name="description" content={desc} />
     {noindex && <meta name="robots" content="noindex, follow" />}
     {canonical && <link rel="canonical" href={canonical} />}
+    {alternateUrl && alternateLang && <link rel="alternate" hreflang={alternateLang} href={alternateUrl} />}
+    {alternateUrl && canonical && <link rel="alternate" hreflang={lang} href={canonical} />}
     <meta property="og:type" content="website" />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={desc} />
