@@ -45,6 +45,24 @@ if (isPublic && hero) {
     || `${name} · Hero บน TripDeDee${tags.length ? ' · ' + tags.slice(0, 3).map(t => '#' + t).join(' ') : ''}`;
   const title = `${name} · Hero on TripDeDee`;
 
+  // -- work book (2026-08-25) --
+  // Proof of work done, from the workLog service on the API side.
+  // If there is no book, the whole section is skipped (no empty box).
+  const wb = hero.workBook || {};
+  const book = wb.hasBook ? wb : null;
+  const TH_M = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  const bookRows = (book?.entries || []).map((e) => {
+    const d = new Date(e.workedAt);
+    return {
+      when: `${TH_M[d.getMonth()]} ${d.getFullYear() + 543}`,
+      title: e.title,
+      where: e.where || '',
+      amount: e.amountBaht,
+      rating: e.rating,
+      tier: e.tier,
+    };
+  });
+
   // Provinces + proof bits are shown as small chip row under the name.
   const proofChips = [];
   if (s.completedLast30d) proofChips.push(`${s.completedLast30d} งาน/เดือน`);
@@ -78,7 +96,7 @@ if (isPublic && hero) {
   ].filter((x) => x.url && String(x.url).trim());
 
   view = {
-    name, rating, tags, portfolio, ogImage, aboutOneLine, metaDesc, title,
+    name, rating, tags, portfolio, ogImage, aboutOneLine, metaDesc, title, book, bookRows,
     proofChips, jsonLd, socialLinks,
     promos: hero.promos || [],
   };
@@ -146,6 +164,39 @@ const notFoundDesc = 'โปรไฟล์ Hero นี้ไม่พร้อ�
         <section class="card">
           <h2>เกี่ยวกับ Hero</h2>
           <p>{view.aboutOneLine}</p>
+        </section>
+      )}
+
+      {view.book && (
+        <section class="card">
+          <h2>สมุดพกงาน</h2>
+          <div class="wbNums">
+            <div class="wbN"><b>{view.book.totals.jobs}</b><span>งานที่ทำ</span></div>
+            {view.book.totals.rating && (
+              <div class="wbN"><b>{view.book.totals.rating}</b><span>คะแนน</span></div>
+            )}
+            <div class="wbN"><b>{view.book.totals.months}</b><span>เดือนที่ทำมา</span></div>
+            <div class="wbN"><b>{view.book.totals.categories}</b><span>ประเภทงาน</span></div>
+          </div>
+          <div class="wbList">
+            {view.bookRows.map((r) => (
+              <div class="wbRow">
+                <div class="wbWhen">{r.when}</div>
+                <div class="wbBody">
+                  <b>{r.title}</b>
+                  {r.where && <span class="wbWhere">{r.where}</span>}
+                  <span class={`wbTier ${r.tier}`}>
+                    {r.tier === 'verified' ? '✓ ระบบยืนยัน' : r.tier === 'confirmed' ? '◐ ลูกค้ายืนยัน' : '○ ลงเอง'}
+                  </span>
+                </div>
+                <div class="wbRight">
+                  {r.rating ? <span class="wbStar">★ {r.rating}</span> : null}
+                  {r.amount ? <span class="wbAmt">฿{r.amount.toLocaleString()}</span> : null}
+                </div>
+              </div>
+            ))}
+          </div>
+          <p class="wbNote">นับจาก {view.book.totals.statsWindowMonths} เดือนล่าสุด · ข้อมูลจากงานที่ทำจริงในระบบ</p>
         </section>
       )}
 
@@ -348,6 +399,28 @@ const notFoundDesc = 'โปรไฟล์ Hero นี้ไม่พร้อ�
     color: #0F172A; margin: 0 0 10px;
   }
   .card p { margin: 0; font-size: 14px; line-height: 1.6; color: #0F172A; }
+
+  /* -- work book (2026-08-25) -- numbers first: they are the only reason
+     anyone reads this page */
+  .wbNums { display: grid; grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)); gap: 8px; margin-bottom: 14px; }
+  .wbN { background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 10px 8px; text-align: center; }
+  .wbN b { display: block; font-size: 22px; font-weight: 800; color: #0F172A; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .wbN span { font-size: 11px; color: #64748B; }
+  .wbList { display: grid; gap: 8px; }
+  .wbRow { display: grid; grid-template-columns: 62px 1fr auto; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid #F1F5F9; }
+  .wbRow:last-child { border-bottom: none; }
+  .wbWhen { font-size: 11.5px; color: #94A3B8; font-weight: 700; }
+  .wbBody b { display: block; font-size: 14.5px; color: #0F172A; }
+  .wbWhere { font-size: 11.5px; color: #64748B; margin-right: 6px; }
+  .wbTier { font-size: 10.5px; font-weight: 700; padding: 1px 7px; border-radius: 999px; white-space: nowrap; }
+  .wbTier.verified { color: #047857; background: #D1FAE5; }
+  .wbTier.confirmed { color: #B45309; background: #FEF3C7; }
+  .wbTier.self { color: #475569; background: #F1F5F9; }
+  .wbRight { text-align: right; white-space: nowrap; }
+  .wbStar { display: block; font-size: 12px; color: #B45309; font-weight: 700; }
+  .wbAmt { display: block; font-size: 13px; color: #0F172A; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .wbNote { margin: 12px 0 0; font-size: 11.5px; color: #94A3B8; }
+  @media (max-width: 420px) { .wbRow { grid-template-columns: 54px 1fr auto; } .wbBody b { font-size: 13.5px; } }
 
   .tagRow { display: flex; flex-wrap: wrap; gap: 6px; }
   .tag {
