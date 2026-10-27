@@ -125,7 +125,8 @@ const jsonLd = {
         </a>
       ) : <span></span>}
       <span class="text-sm text-gray-500">
-        {offset + 1}–{Math.min(offset + limit, results.total)} จาก {results.total.toLocaleString()}
+        {/* ไม่มี "จาก N" · results.total รวมหมุดนำเข้า (27 ต.ค. 2569) */}
+        {offset + 1}–{Math.min(offset + limit, results.total)}
       </span>
       {hasNext ? (
         <a href={`/shop/area/${encodeURIComponent(provinceRaw)}?${pageQs(nextOffset)}`} class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-bold text-gray-700 hover:border-orange-300 hover:text-orange-700" rel="next">

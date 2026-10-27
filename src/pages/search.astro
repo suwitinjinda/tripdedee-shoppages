@@ -5,7 +5,7 @@
 import DirectoryLayout from '../layouts/DirectoryLayout.astro';
 import ShopCard from '../components/ShopCard.astro';
 import SearchBar from '../components/SearchBar.astro';
-import { searchShops, getShopFacets } from '../lib/api.js';
+import { searchShops, getShopFacets, realCount } from '../lib/api.js';
 import { typeLabel } from '../lib/shopType.js';
 
 const q = String(Astro.url.searchParams.get('q') || '').slice(0, 100).trim();
@@ -26,7 +26,13 @@ if (province) pageBits.push(province);
 const heading = pageBits.length ? pageBits.join(' · ') : 'ทุกร้าน';
 
 const title = `ค้นหา: ${heading} | TripDeDee`;
-const description = `พบ ${results.total.toLocaleString()} ร้านสำหรับ ${heading}`;
+// ตัวเลขที่โชว์ = ร้านจริงเท่านั้น (realTotal · 27 ต.ค. 2569) · results.total รวมหมุดที่นำเข้าจากแผนที่สาธารณะ
+// ใช้แบ่งหน้าอย่างเดียว · หลังบ้านไม่ส่ง realTotal = ไม่โชว์ตัวเลขเลย (ไม่เดา)
+const realTotal = realCount(results.realTotal);
+const realText = realTotal > 0 ? `ร้านในระบบ TripDeDee ${realTotal.toLocaleString()} ร้าน` : '';
+const description = realText
+  ? `ร้านสำหรับ ${heading} — ${realText}`
+  : `ร้านสำหรับ ${heading} — เมนู ราคา ที่ตั้ง รีวิว`;
 const baseQs = new URLSearchParams();
 if (q) baseQs.set('q', q);
 if (province) baseQs.set('province', province);
@@ -60,7 +66,7 @@ const pageQs = (off) => {
     <h1 class="mr-3 text-2xl font-extrabold text-gray-900">
       {heading}
     </h1>
-    <span class="text-sm text-gray-500">{results.total.toLocaleString()} ร้าน</span>
+    {realText && <span class="text-sm text-gray-500">{realText}</span>}
 
     {(q || province || shopType) && (
       <a
@@ -113,7 +119,7 @@ const pageQs = (off) => {
             href={`/shop/search?${u.toString()}`}
             class="shrink-0 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-600 hover:border-orange-300 hover:text-orange-700"
           >
-            {p.province} <span class="text-gray-400">{p.count}</span>
+            {p.province} {realCount(p.real) > 0 && <span class="text-gray-400">{p.real.toLocaleString()}</span>}
           </a>
         );
       })}
@@ -149,7 +155,8 @@ const pageQs = (off) => {
         </a>
       ) : <span></span>}
       <span class="text-sm text-gray-500">
-        {offset + 1}–{Math.min(offset + limit, results.total)} จาก {results.total.toLocaleString()}
+        {/* ไม่มี "จาก N" · results.total รวมหมุดนำเข้า (27 ต.ค. 2569) */}
+        {offset + 1}–{Math.min(offset + limit, results.total)}
       </span>
       {hasNext ? (
         <a

@@ -2,6 +2,7 @@
 import ShopLayout from '../layouts/ShopLayout.astro';
 import { t, pick } from '../lib/i18n.js';
 import { hotelPath } from '../lib/slug.js';
+import { isDemoHotel } from '../lib/hotelDemo.js';
 
 const { hotelId, lang, hotel, isPublic } = Astro.props;
 const tr = t(lang);
@@ -33,7 +34,10 @@ const CATEGORY_LABEL_EN = {
 // (หลังบ้าน /hotels/:id ไม่ส่งยอดจองมาอยู่แล้ว)
 // ไม่ถึงเกณฑ์ = noindex,follow + ไม่อ้างว่าจองได้ + ไม่เอาราคา/สิ่งอำนวยความสะดวกที่ไม่รู้ที่มาใส่ JSON-LD
 const hotelRooms = Array.isArray(hotel?.roomTypes) ? hotel.roomTypes : [];
-const isClaimed = !!(hotel && (hotel.ownerUserId || (hotel.ownerEmail && String(hotel.ownerEmail).trim()) || hotelRooms.length > 0));
+// hasOwner (true/false) มาจากหลังบ้านแทน ownerEmail ที่ไม่ส่งออกทางสาธารณะแล้ว (services/hotelPublic.js · 27 ต.ค. 2569)
+const isClaimed = !!(hotel && (hotel.hasOwner === true || hotel.ownerUserId || (hotel.ownerEmail && String(hotel.ownerEmail).trim()) || hotelRooms.length > 0));
+// ที่พักสาธิต = noindex + ไม่ใส่ JSON-LD (src/lib/hotelDemo.js ที่เดียว)
+const isDemo = isDemoHotel(hotel, hotelId);
 const footerText = tr.pageOn;
 
 let view = null;
@@ -151,8 +155,8 @@ if (isPublic) {
     canonical={canonical}
     alternateUrl={alternateUrl}
     alternateLang={alternateLang}
-    jsonLd={view.jsonLd}
-    noindex={!isClaimed}
+    jsonLd={isDemo ? undefined : view.jsonLd}
+    noindex={!isClaimed || isDemo}
     footerText={footerText}
   >
     {/* Hero */}

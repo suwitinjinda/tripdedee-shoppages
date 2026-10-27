@@ -59,17 +59,26 @@ export async function searchShops(opts = {}) {
   }
   const json = await getCached(`/shop/search?${qs.toString()}`);
   if (!json || json.notFound || json.success === false) {
-    return { shops: [], total: 0, limit: opts.limit || 24, offset: opts.offset || 0 };
+    return { shops: [], total: 0, realTotal: null, limit: opts.limit || 24, offset: opts.offset || 0 };
   }
   return {
     shops: Array.isArray(json.data) ? json.data : [],
+    // total = จำนวนที่ลิสต์ (รวมหมุดนำเข้าจากแผนที่สาธารณะ) ใช้แบ่งหน้าเท่านั้น ห้ามโชว์เป็นตัวเลข
+    // realTotal = ร้านจริง (importSource ว่าง) · หลังบ้านรุ่นเก่าไม่ส่งมา = null → ไม่โชว์ตัวเลข (27 ต.ค. 2569)
     total: Number(json.total) || 0,
+    realTotal: realCount(json.realTotal),
     limit: Number(json.limit) || 24,
     offset: Number(json.offset) || 0,
   };
 }
 
+// ตัวเลขร้านจริงจากหลังบ้าน · ไม่ใช่ตัวเลข = null (ห้ามเดา ห้ามถอยไปใช้ยอดรวมหมุดนำเข้า)
+export function realCount(v) {
+  return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null;
+}
+
 // Province + shopType counts for the directory homepage filter chips.
+// แต่ละชิปมี count (รวมหมุดนำเข้า · ห้ามโชว์) กับ real (ร้านจริง · โชว์ได้)
 export async function getShopFacets() {
   const json = await getCached('/shop/facets');
   if (!json || json.notFound || json.success === false) {

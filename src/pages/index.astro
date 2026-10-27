@@ -6,7 +6,7 @@
 import DirectoryLayout from '../layouts/DirectoryLayout.astro';
 import ShopCard from '../components/ShopCard.astro';
 import SearchBar from '../components/SearchBar.astro';
-import { searchShops, getShopFacets } from '../lib/api.js';
+import { searchShops, getShopFacets, realCount } from '../lib/api.js';
 import { typeLabel } from '../lib/shopType.js';
 
 const [facets, featured] = await Promise.all([
@@ -15,6 +15,7 @@ const [facets, featured] = await Promise.all([
 ]);
 
 const title = 'ค้นหาร้านอาหาร · ร้านค้า · บริการ | TripDeDee';
+// ตัวเลขบนชิป = ร้านจริงเท่านั้น (facets.*.real · importSource ว่าง) · ไม่มี real หรือเป็น 0 = ไม่โชว์ตัวเลข
 // ไม่ใส่จำนวนร้าน (27 ต.ค. 2569) · ยอดจาก /shop/search กับ /shop/facets รวมหมุดที่นำเข้าจาก
 // แผนที่สาธารณะ (importSource) ด้วย ตอนตรวจภูเก็ต 484 ร้าน เป็นหมุดนำเข้า 427 · ทั้งประเทศ 5,466 จาก 8,283
 // หลังบ้านไม่มียอดร้านจริงแยกให้ จึงเอาตัวเลขออกแทนการเดา · AI จะได้ไม่อ้างตัวเลขที่เป่าเกินจริง
@@ -96,7 +97,7 @@ const TYPE_ICON = {
             <span class="mt-1 text-sm font-bold text-gray-800 group-hover:text-orange-700">
               {typeLabel({ shopType: t.shopType }, 'th')}
             </span>
-            <span class="text-[11px] text-gray-400">{t.count.toLocaleString()} ร้าน</span>
+            {realCount(t.real) > 0 && <span class="text-[11px] text-gray-400">{t.real.toLocaleString()} ร้าน</span>}
           </a>
         ))}
       </div>
@@ -116,7 +117,7 @@ const TYPE_ICON = {
             class="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:border-orange-300 hover:bg-orange-50 hover:text-orange-700"
           >
             {p.province}
-            <span class="ml-1 text-xs text-gray-400">{p.count}</span>
+            {realCount(p.real) > 0 && <span class="ml-1 text-xs text-gray-400">{p.real.toLocaleString()}</span>}
           </a>
         ))}
       </div>
