@@ -24,6 +24,18 @@ const CATEGORY_LABEL_EN = {
   apartment: 'Apartment', campsite: 'Campsite', other: 'Property',
 };
 
+// ที่พักที่มีตัวตนจริง (27 ต.ค. 2569)
+//
+// ที่พัก active บน prod 351 แห่ง ส่วนใหญ่เป็นข้อมูลที่ลงไว้ล่วงหน้า (เครือใหญ่ ๆ) ไม่มีเจ้าของ ไม่มีห้อง
+// ไม่เคยมีการจอง แต่หน้าเดิมบอก "จองห้องพักในแอป TripDeDee" และเปิดให้ index ทุกแห่ง
+// เกณฑ์: มีเจ้าของ (ownerUserId / ownerEmail) หรือมีห้องพัก (roomTypes) · ตอนตรวจมี 6 แห่ง
+// ที่พักที่เคยมีการจองและยังเปิดอยู่ (3 แห่ง) อยู่ในกลุ่มนี้ทั้งหมด จึงไม่ต้องใช้ยอดจอง
+// (หลังบ้าน /hotels/:id ไม่ส่งยอดจองมาอยู่แล้ว)
+// ไม่ถึงเกณฑ์ = noindex,follow + ไม่อ้างว่าจองได้ + ไม่เอาราคา/สิ่งอำนวยความสะดวกที่ไม่รู้ที่มาใส่ JSON-LD
+const hotelRooms = Array.isArray(hotel?.roomTypes) ? hotel.roomTypes : [];
+const isClaimed = !!(hotel && (hotel.ownerUserId || (hotel.ownerEmail && String(hotel.ownerEmail).trim()) || hotelRooms.length > 0));
+const footerText = tr.pageOn;
+
 let view = null;
 if (isPublic) {
   const cat = String(hotel.category || 'hotel').toLowerCase();
@@ -45,6 +57,15 @@ if (isPublic) {
     return `${url}?v=2`;
   }
   const ogImage = bustCache(images[0] || hotel.imageUrl) || undefined;
+
+  const imageList = images.length ? images : (hotel.imageUrl ? [hotel.imageUrl] : []);
+  const amenities = Array.isArray(hotel.amenities)
+    ? [...new Set(hotel.amenities.map((a) => String(a || '').trim()).filter(Boolean))]
+    : [];
+  const dbPriceRange = typeof hotel.priceRange === 'string' ? hotel.priceRange.trim() : '';
+  // ชื่อ + จังหวัดใน <title> (ถ้าชื่อยังไม่มีจังหวัดอยู่แล้ว)
+  const titleName = hotel.province && !String(name).includes(hotel.province)
+    ? `${name} ${hotel.province}` : name;
 
   const lat = hotel.coordinates?.latitude ?? hotel.latitude;
   const lng = hotel.coordinates?.longitude ?? hotel.longitude;
@@ -74,7 +95,7 @@ if (isPublic) {
     '@type': cat === 'campsite' ? 'Campground' : cat === 'apartment' ? 'Apartment' : (cat === 'resort' ? 'Resort' : 'Hotel'),
     name,
     description: metaDesc,
-    image: images.length ? images : undefined,
+    image: imageList.length ? imageList : undefined,
     telephone: phone || undefined,
     url: canonical,
     address: {
@@ -87,19 +108,29 @@ if (isPublic) {
     geo: lat != null && lng != null
       ? { '@type': 'GeoCoordinates', latitude: lat, longitude: lng }
       : undefined,
-    priceRange: cheapest ? `฿${cheapest.toLocaleString()}+` : undefined,
+    // priceRange: ราคาห้องจริงก่อน · ไม่มีห้องค่อยใช้ช่อง priceRange ที่เจ้าของกรอก · ที่พักยังไม่ยืนยันไม่ใส่
+    priceRange: cheapest
+      ? `฿${cheapest.toLocaleString()}+`
+      : (isClaimed && dbPriceRange ? dbPriceRange : undefined),
+    amenityFeature: isClaimed && amenities.length
+      ? amenities.map((a) => ({ '@type': 'LocationFeatureSpecification', name: a, value: true }))
+      : undefined,
     aggregateRating: hotel.totalReviews > 0
       ? { '@type': 'AggregateRating', ratingValue: hotel.averageRating, reviewCount: hotel.totalReviews }
       : undefined,
   };
 
-  view = { name, description, tLabel, metaDesc, ogImage, images, lat, lng,
+  // ปุ่มจองโผล่เฉพาะเมื่อจองผ่านแอปได้จริง (ตรงกับเงื่อนไขปุ่ม "จองห้องนี้" ด้านบน)
+  const canBookInApp = hotel.bookingType === 'in_app'
+    && rooms.some((r) => Number(r.priceFrom) > 0 && (Number(r.quantity) || 1) > 0);
+
+  view = { name, titleName, description, tLabel, metaDesc, ogImage, images, lat, lng, canBookInApp, amenities,
     cheapest, rooms, phone, tel, phoneDisplay, mapUrl, jsonLd, cat };
 }
 ---
 
 {!isPublic && (
-  <ShopLayout lang={lang} title={`${tr.hotelNotFound} | TripDeDee`} noindex>
+  <ShopLayout lang={lang} title={`${tr.hotelNotFound} | TripDeDee`} noindex footerText={footerText}>
     <div class="px-5 py-20 text-center">
       <h1 class="text-2xl font-bold text-gray-900">{tr.hotelNotFound}</h1>
       <p class="mt-3 text-gray-500">{tr.hotelNotFoundBody}</p>
@@ -114,13 +145,15 @@ if (isPublic) {
 {isPublic && view && (
   <ShopLayout
     lang={lang}
-    title={`${view.name} | ${view.tLabel} | TripDeDee`}
+    title={`${view.titleName} | ${view.tLabel} | TripDeDee`}
     description={view.metaDesc}
     ogImage={view.ogImage}
     canonical={canonical}
     alternateUrl={alternateUrl}
     alternateLang={alternateLang}
     jsonLd={view.jsonLd}
+    noindex={!isClaimed}
+    footerText={footerText}
   >
     {/* Hero */}
     <header>
@@ -634,6 +667,18 @@ if (isPublic) {
       })();
     </script>
 
+    {/* Amenities — แสดงเฉพาะที่พักที่เจ้าของยืนยันแล้ว (ตรงกับ amenityFeature ใน JSON-LD) */}
+    {isClaimed && view.amenities.length > 0 && (
+      <section class="border-t border-gray-100 px-5 py-5">
+        <h2 class="mb-3 text-lg font-bold text-gray-900">{tr.amenities}</h2>
+        <ul class="flex flex-wrap gap-2">
+          {view.amenities.map((a) => (
+            <li class="rounded-full bg-gray-100 px-3 py-1 text-sm text-gray-700">{a}</li>
+          ))}
+        </ul>
+      </section>
+    )}
+
     {/* Location */}
     {(hotel.address || view.mapUrl) && (
       <section class="border-t border-gray-100 px-5 py-5">
@@ -669,7 +714,10 @@ if (isPublic) {
         id="open-in-app-btn"
         data-hotel-id={hotelId}
         class="block w-full rounded-xl bg-blue-600 px-5 py-3.5 text-center text-base font-semibold text-white cursor-pointer"
-      >{tr.bookNow}</button>
+      >{view.canBookInApp ? tr.bookNow : tr.viewHotelInApp}</button>
+      {!isClaimed && (
+        <p class="mt-3 text-center text-xs text-gray-500">{tr.hotelUnclaimed}</p>
+      )}
     </div>
     <script>
       (function () {

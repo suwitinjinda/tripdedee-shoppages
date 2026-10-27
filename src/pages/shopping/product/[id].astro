@@ -24,13 +24,26 @@ const images = Array.isArray(product?.images) && product.images.length > 0
   ? product.images
   : (product?.image ? [product.image] : []);
 const heroImage = images[0] || '';
+// สถานะสั่งได้/ไม่ได้ อิงหลังบ้านตัวเดียวกับหน้าหลัก /shopping/product.html (services/shoppingSeo.js)
+// orderable=false · unclaimed = ทีมงานลงไว้ เจ้าของร้านยังไม่เคลม (ยังไม่ได้ความยินยอม) · paused = ค้างค่าธรรมเนียม
+// เดิมหน้านี้บอก "จัดส่งทั่วประเทศ" + InStock กับสินค้า OTOP ที่ยังสั่งไม่ได้ และเปิดให้ index (ตรวจ 27 ต.ค. 2569)
+const orderable = product ? product.orderable !== false : false;
+const closedReason = product?.closedReason || '';
+const statusText = closedReason === 'unclaimed'
+  ? 'รออนุมัติ · ยังสั่งไม่ได้'
+  : (!orderable ? 'ปิดรับออเดอร์ชั่วคราว' : '');
 const description = (product?.description || '').trim().slice(0, 160)
-  || `${name} · ฿${price} · จัดส่งทั่วประเทศ · TripDeDee Shopping`;
+  || (orderable
+    ? `${name} · ฿${price} · TripDeDee Shopping`
+    : `${name} · ${statusText} · TripDeDee Shopping`);
 const ogImage = heroImage
   || product?.shop?.images?.[0]
   || 'https://tripdedee.com/logo.png';
 const title = `${name} · ฿${price} · TripDeDee Shopping`;
-const canonical = `https://tripdedee.com/shop/shopping/product/${encodeURIComponent(id)}`;
+// หน้าหลักของสินค้าคือ /shopping/product.html?id=… (อยู่ใน /shopping/sitemap.xml แล้ว)
+// หน้านี้เป็นหน้าแชร์เปิดแอป จึงชี้ canonical ไปหน้าหลักเสมอ ไม่ให้เป็นสำเนาซ้ำ
+const canonical = `https://tripdedee.com/shopping/product.html?id=${encodeURIComponent(id)}`;
+const robots = orderable ? 'index, follow' : 'noindex, follow';
 
 // JSON-LD ชนิด Product (23 ส.ค. 2569)
 //
@@ -58,7 +71,8 @@ const jsonLd = product ? {
     url: canonical,
     priceCurrency: 'THB',
     price: String(price),
-    ...(hasStockInfo ? {
+    // สั่งไม่ได้ = OutOfStock เสมอ (ตรงกับ productLd ของหน้าหลัก) · สั่งได้ค่อยดู stock
+    ...(!orderable ? { availability: 'https://schema.org/OutOfStock' } : hasStockInfo ? {
       availability: stockNum > 0
         ? 'https://schema.org/InStock'
         : 'https://schema.org/OutOfStock',
@@ -88,6 +102,7 @@ const androidStoreUrl = 'https://play.google.com/store/apps/details?id=com.munmu
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
     <meta name="description" content={description} />
+    <meta name="robots" content={robots} />
     <link rel="canonical" href={canonical} />
 
     {/* Open Graph (Facebook + LINE) */}
@@ -122,6 +137,7 @@ const androidStoreUrl = 'https://play.google.com/store/apps/details?id=com.munmu
       .price { font-size: 22px; font-weight: 800; color: #1677FF; margin-bottom: 4px; }
       .shop { font-size: 13px; color: #666; margin-bottom: 12px; }
       .badge { display: inline-block; padding: 3px 10px; background: #e6f4ff; color: #1677FF; border-radius: 12px; font-size: 12px; font-weight: 700; margin-bottom: 12px; }
+      .badge.closed { background: #fff4e5; color: #ad6800; }
       .desc { font-size: 14px; color: #555; white-space: pre-wrap; margin-top: 8px; padding-top: 12px; border-top: 1px solid #eee; }
       .cta-row { padding: 0 16px 16px; }
       .cta { display: block; width: 100%; padding: 14px; background: #1677FF; color: #fff; text-decoration: none; text-align: center; border-radius: 10px; font-weight: 700; font-size: 15px; }
@@ -137,7 +153,9 @@ const androidStoreUrl = 'https://play.google.com/store/apps/details?id=com.munmu
         <div class="card">
           {heroImage && <img class="hero" src={heroImage} alt={name} />}
           <div class="body">
-            <span class="badge">🛍 จัดส่งทั่วประเทศ</span>
+            {orderable
+              ? <span class="badge">🛍 TripDeDee Shopping</span>
+              : <span class="badge closed">{statusText}</span>}
             <div class="name">{name}</div>
             <div class="price">฿{price.toLocaleString('th-TH')}</div>
             <div class="shop">{shopName}{province ? ` · 📍 ${province}` : ''}</div>

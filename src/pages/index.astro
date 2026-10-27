@@ -15,7 +15,10 @@ const [facets, featured] = await Promise.all([
 ]);
 
 const title = 'ค้นหาร้านอาหาร · ร้านค้า · บริการ | TripDeDee';
-const description = `ค้นหาร้านอาหารและร้านค้ากว่า ${facets.totalActive.toLocaleString()} ร้านทั่วประเทศ — เมนู ราคา ที่ตั้ง รีวิว ครบในที่เดียว`;
+// ไม่ใส่จำนวนร้าน (27 ต.ค. 2569) · ยอดจาก /shop/search กับ /shop/facets รวมหมุดที่นำเข้าจาก
+// แผนที่สาธารณะ (importSource) ด้วย ตอนตรวจภูเก็ต 484 ร้าน เป็นหมุดนำเข้า 427 · ทั้งประเทศ 5,466 จาก 8,283
+// หลังบ้านไม่มียอดร้านจริงแยกให้ จึงเอาตัวเลขออกแทนการเดา · AI จะได้ไม่อ้างตัวเลขที่เป่าเกินจริง
+const description = `ค้นหาร้านอาหารและร้านค้าทั่วประเทศ — เมนู ราคา ที่ตั้ง รีวิว ครบในที่เดียว`;
 const canonical = 'https://tripdedee.com/shop/';
 
 const jsonLd = {
@@ -69,7 +72,6 @@ const TYPE_ICON = {
         ทั่วประเทศไทย
       </h1>
       <p class="mt-3 text-base text-white/90">
-        {facets.totalActive.toLocaleString()} ร้านทั่วประเทศ ·
         เมนู ราคา ที่ตั้ง รีวิว ครบในที่เดียว
       </p>
       <div class="mt-6">

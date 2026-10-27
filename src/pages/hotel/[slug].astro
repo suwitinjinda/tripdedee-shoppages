@@ -1,10 +1,10 @@
 ---
 import HotelPage from '../../components/HotelPage.astro';
 import { getHotel } from '../../lib/api.js';
-import { extractShopId, makeParam, hotelPath } from '../../lib/slug.js';
+import { extractHotelId, makeParam, hotelPath } from '../../lib/slug.js';
 
 const raw = Astro.params.slug || '';
-const hotelId = extractShopId(raw);
+const hotelId = extractHotelId(raw);
 const hotel = await getHotel(hotelId);
 const isPublic = !!hotel;
 

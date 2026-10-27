@@ -6,10 +6,18 @@
 //   3. Deep-link CTAs — auto-attempt on load + visible "เปิดในแอป" button;
 //      fallback to Play Store / App Store install links
 import ShopLayout from '../layouts/ShopLayout.astro';
+import { t } from '../lib/i18n.js';
 
 const { userId, lang = 'th', hero, isPublic } = Astro.props;
 const SITE = 'https://tripdedee.com';
-const canonical = `${SITE}/hero/${userId}`;
+// หน้าหลักของคนคือโปรไฟล์สาธารณะ tripdedee.com/@<handle> (27 ต.ค. 2569)
+// หน้านี้เป็นหน้าแชร์เปิดแอป · ถ้ามี handle ให้ canonical ชี้ไปโปรไฟล์ ไม่งั้น noindex,follow
+// ตอนตรวจ หลังบ้าน /hero/public/:userId ยังไม่ส่ง handle มา (Hero 44 คน มีโปรไฟล์สาธารณะ 37 คน)
+// → ทุกหน้า noindex จนกว่าหลังบ้านจะส่ง handle (เฉพาะโปรไฟล์ที่ไม่ hidden) มาในช่อง handle
+const rawHandle = String(hero?.handle || hero?.publicHandle || '').trim().replace(/^@/, '').toLowerCase();
+const handle = /^[a-z0-9][a-z0-9._-]{1,39}$/.test(rawHandle) ? rawHandle : '';
+const canonical = handle ? `${SITE}/@${handle}` : `${SITE}/hero/${userId}`;
+const indexable = isPublic && !!handle;
 
 // ── App links ─────────────────────────────────────────────────────
 // Deep-link scheme is `tripdedee://hero/:userId` (handled by the app's
@@ -87,7 +95,8 @@ const notFoundDesc = 'โปรไฟล์ Hero นี้ไม่พร้อ�
   ogImage={view?.ogImage || undefined}
   canonical={canonical}
   jsonLd={view?.jsonLd || undefined}
-  noindex={!isPublic}
+  noindex={!indexable}
+  footerText={t(lang).pageOn}
 >
   {!isPublic ? (
     <main class="empty">

@@ -29,7 +29,10 @@ const heading = province
   ? `${typeText} ใน ${province}`
   : `${typeText}ทั้งหมด`;
 const title = `${heading} | TripDeDee`;
-const description = `${results.total.toLocaleString()} ${typeText}${province ? ' ในจังหวัด' + province : 'ทั่วประเทศ'} — เมนู ราคา ที่ตั้ง รีวิว`;
+// ไม่ใส่จำนวนร้าน (27 ต.ค. 2569) · ยอดจาก /shop/search กับ /shop/facets รวมหมุดที่นำเข้าจาก
+// แผนที่สาธารณะ (importSource) ด้วย ตอนตรวจภูเก็ต 484 ร้าน เป็นหมุดนำเข้า 427 · ทั้งประเทศ 5,466 จาก 8,283
+// หลังบ้านไม่มียอดร้านจริงแยกให้ จึงเอาตัวเลขออกแทนการเดา · AI จะได้ไม่อ้างตัวเลขที่เป่าเกินจริง
+const description = `${typeText}${province ? ' ในจังหวัด' + province : 'ทั่วประเทศ'} — เมนู ราคา ที่ตั้ง รีวิว`;
 const canonical = `https://tripdedee.com/shop/category/${encodeURIComponent(shopTypeRaw)}${province ? '?province=' + encodeURIComponent(province) : ''}`;
 
 const nextOffset = offset + limit;
@@ -68,7 +71,6 @@ const jsonLd = {
 
   <div class="mb-6 flex flex-wrap items-baseline gap-3">
     <h1 class="text-2xl font-extrabold text-gray-900">{heading}</h1>
-    <span class="text-sm text-gray-500">{results.total.toLocaleString()} ร้าน</span>
   </div>
 
   {/* Province filter within this category */}

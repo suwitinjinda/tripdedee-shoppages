@@ -12,6 +12,8 @@ const {
   alternateLang,
   jsonLd,
   noindex = false,
+  // ข้อความท้ายหน้า · ค่าเริ่มต้น "หน้าร้านนี้สร้างโดย" ใช้ได้กับหน้าร้านเท่านั้น
+  footerText,
 } = Astro.props;
 
 const tr = t(lang);
@@ -111,7 +113,7 @@ const desc = (description || '').slice(0, 300);
         </a>
       )}
       <p>
-        {tr.poweredBy}{' '}
+        {footerText || tr.poweredBy}{' '}
         <a href="https://tripdedee.com" class="font-medium text-orange-500">TripDeDee</a>
       </p>
     </footer>

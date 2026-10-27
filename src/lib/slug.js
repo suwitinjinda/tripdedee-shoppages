@@ -58,6 +58,16 @@ export function extractShopId(param) {
   return raw;
 }
 
+// ที่พักใช้ hotelId 6 หลักต่อท้าย slug ได้ด้วย (27 ต.ค. 2569)
+// เดิมใช้ extractShopId ซึ่งรู้จักแค่ ObjectId · /hotel/890103 เด้งไป /hotel/<ชื่อ>-890103 แล้วหน้านั้น 404
+// (ที่พักที่มีเจ้าของจริงทั้ง 6 แห่งมี hotelId จึงโดนทุกแห่ง)
+export function extractHotelId(param) {
+  const id = extractShopId(param);
+  if (id !== String(param || '')) return id;
+  const tail = String(param || '').split('-').pop() || '';
+  return /^\d{6}$/.test(tail) ? tail : id;
+}
+
 // Full path, URL-encoded so Thai chars are safe in headers and hrefs.
 export function shopPath(lang, name, shopId) {
   const enc = encodeURIComponent(makeParam(name, shopId));

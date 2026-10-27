@@ -1,4 +1,4 @@
-import { getActiveShops, getShoppingProducts, getFoodDishes } from '../lib/api.js';
+import { getActiveShops, getFoodDishes } from '../lib/api.js';
 import { foodHref } from '../lib/food.js';
 import { shopHref } from '../lib/slug.js';
 
@@ -17,21 +17,10 @@ export async function GET() {
     locs.push(SITE + shopHref('en', s));
   }
 
-  // สินค้าบน Shopping marketplace (23 ส.ค. 2569)
-  //
-  // เจ้าของแจ้ง "มีสินค้าใน shopping ด้วยน่ะ ต้องหาเจอ ทั้ง google and AI"
-  // เดิม sitemap มีแต่หน้าร้าน Google จึงไม่เคยรู้ว่ามีหน้าสินค้าอยู่
-  //
-  // หน้าสินค้ามีอยู่แล้วที่ /shop/shopping/product/<id> และ render ครบ
-  // (ชื่อ · ราคา · รูปจริง) แค่ไม่มีใครบอก Google ว่ามันอยู่ตรงไหน
-  // ถ้าดึงรายการไม่สำเร็จก็ปล่อยผ่าน — sitemap ของร้านต้องออกได้เสมอ
-  try {
-    const products = await getShoppingProducts();
-    for (const p of products) {
-      const pid = p && (p.id || p._id);
-      if (pid) locs.push(`${SITE}/shop/shopping/product/${pid}`);
-    }
-  } catch (_) { /* ไม่ให้สินค้าล้มทั้ง sitemap */ }
+  // สินค้า Shopping ไม่อยู่ใน sitemap นี้แล้ว (27 ต.ค. 2569)
+  // หน้า /shop/shopping/product/<id> เป็นหน้าแชร์เปิดแอป canonical ชี้ไป /shopping/product.html?id=…
+  // ซึ่งอยู่ใน /shopping/sitemap.xml (เฉพาะร้านที่เคลมแล้ว) · ใส่ซ้ำตรงนี้ = ส่งสำเนาให้ Google
+  // และเดิมใส่สินค้า OTOP ที่ยังสั่งไม่ได้ปนเข้ามาด้วย
 
   // หน้า "เมนู × จังหวัด" (27 ต.ค. 2569) · หลังบ้านคืนเฉพาะเมนู/จังหวัดที่มีร้านถึงเกณฑ์ (≥2)
   // จึงไม่มีหน้าบางหรือหน้า 404 หลุดเข้า sitemap · ดึงไม่ได้ก็ข้ามไป
