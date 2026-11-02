@@ -5,7 +5,28 @@ import { extractShopId, shopParam, shopHref } from '../lib/slug.js';
 
 const raw = Astro.params.slug || '';
 const shopId = extractShopId(raw);
-const shop = await getShop(shopId);
+let shop = await getShop(shopId);
+
+/* ── ลิงก์เก่าที่แชร์ออกไปแล้ว ต้องยังเปิดได้ (30 ส.ค. 2569) ──
+ *
+ * slug ของร้านเปลี่ยนรูปแบบไปแล้ว จาก "<ชื่อ>-<shopId>" เป็น "<ชื่อ>-<shortCode>"
+ * และชื่อร้านเองก็แก้ได้ตลอด · ลิงก์ที่ร้านแปะไว้ในเฟซบุ๊ก ไลน์ หรือใบปลิว
+ * ตั้งแต่ก่อนเปลี่ยน จะกลายเป็น 404 ทั้งหมด ทั้งที่ร้านยังเปิดอยู่
+ *
+ * เจอจริงจากลิงก์ที่ร้านแชร์: /shop/ร้านอาหารลึกลับตามสั่ง-jjgame-737326
+ * ร้านยังอยู่ (ตอนนี้ slug เป็น ร้านอาหารตามสั่ง-jj-game-f87d) แต่หน้าไม่ขึ้น
+ *
+ * ท่อนท้ายของ slug เป็นตัวระบุร้านเสมอ ไม่ว่ารูปแบบไหน — ลองอันนั้นต่อ
+ * หลังบ้านหาได้ทั้งจาก _id, shopId และ slug ปัจจุบัน
+ * เจอแล้วโค้ดข้างล่างจะเด้งไปที่อยู่ปัจจุบันให้เอง ลูกค้าไม่ต้องรู้อะไรเลย
+ */
+if (!shop) {
+  const tail = String(raw).split('-').pop() || '';
+  if (tail && tail !== raw && tail !== shopId) {
+    shop = await getShop(tail);
+  }
+}
+
 const isPublic = !!shop;
 
 if (isPublic) {
@@ -23,7 +44,11 @@ if (isPublic) {
   //    ลิงก์เก่าที่พา _id เต็มมา จะถูกเด้งไปที่ตัวสั้นให้เอง
   const hasMode = Astro.url.searchParams.has('mode');
   if (!hasMode && raw !== shopParam(shop)) {
-    return Astro.redirect(shopHref('th', shop), 302);
+    // 301 (2 พ.ย. 2569) · Bing ยังวิ่งเข้าลิงก์ _id เต็มวันละ ~80 ครั้ง (26 ต.ค. 692) เพราะ 302
+    // บอกว่าย้ายชั่วคราว บอทเลยกลับมาเก็บที่อยู่เก่าซ้ำ ไม่โอนไปที่อยู่ใหม่
+    // เหตุผลเดิมที่ใช้ 302 คือกลัว 301 ที่แคชไว้ทำ ?mode= หาย แต่มีด่าน hasMode ข้างบนแล้ว
+    // (ลิงก์ที่มี ?mode= ไม่ถูกเด้งเลย และแคชแยกตาม query อยู่แล้ว)
+    return Astro.redirect(shopHref('th', shop), 301);
   }
 } else {
   Astro.response.status = 404;

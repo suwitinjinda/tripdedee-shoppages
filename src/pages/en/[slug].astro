@@ -18,7 +18,11 @@ if (isPublic) {
   // (เดิมหน้าอังกฤษปั้น slug จากชื่ออังกฤษ + _id เต็ม คนละก้อนกับหน้าไทย)
   const hasMode = Astro.url.searchParams.has('mode');
   if (!hasMode && raw !== shopParam(shop)) {
-    return Astro.redirect(shopHref('en', shop), 302);
+    // 301 (2 พ.ย. 2569) · Bing ยังวิ่งเข้าลิงก์ _id เต็มวันละ ~80 ครั้ง (26 ต.ค. 692) เพราะ 302
+    // บอกว่าย้ายชั่วคราว บอทเลยกลับมาเก็บที่อยู่เก่าซ้ำ ไม่โอนไปที่อยู่ใหม่
+    // เหตุผลเดิมที่ใช้ 302 คือกลัว 301 ที่แคชไว้ทำ ?mode= หาย แต่มีด่าน hasMode ข้างบนแล้ว
+    // (ลิงก์ที่มี ?mode= ไม่ถูกเด้งเลย และแคชแยกตาม query อยู่แล้ว)
+    return Astro.redirect(shopHref('en', shop), 301);
   }
 } else {
   Astro.response.status = 404;
