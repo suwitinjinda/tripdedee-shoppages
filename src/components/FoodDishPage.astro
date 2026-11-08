@@ -42,8 +42,8 @@ const title = province
   /* 8 พ.ย. 2569 · Search Console: "ร้านอาหารอีสานใกล้ฉัน" เห็น 81 ครั้ง กด 1 · ชื่อเดิมไม่มีคำว่าใกล้ จึงไม่ตรงกับที่คนค้น */
   ? (en ? `${label} near you in ${province} · ${nf(total)} shops with menus & prices | TripDeDee`
         : `ร้าน${label}ใกล้ฉัน ใน${province} · ${nf(total)} ร้าน ดูเมนู ราคา สั่งได้ | TripDeDee`)
-  : (en ? `${label} · ${nf(total)} shops in Thailand with menus & prices | TripDeDee`
-        : `ร้าน${label} · ${nf(total)} ร้านทั่วไทย พร้อมเมนูและราคา | TripDeDee`);
+  : (en ? `${label} near you · ${nf(total)} shops in Thailand with menus & prices | TripDeDee`
+        : `ร้าน${label}ใกล้ฉัน · ${nf(total)} ร้านทั่วไทย พร้อมเมนูและราคา | TripDeDee`);
 const sampleNames = shops.slice(0, 3).map((s) => (en ? s.nameEn || s.shopName : s.shopName)).filter(Boolean);
 const description = province
   ? (en
@@ -51,7 +51,7 @@ const description = province
       : `หาร้าน${label}ใกล้คุณใน${province} ${nf(total)} ร้านบน TripDeDee${sampleNames.length ? ` เช่น ${sampleNames.join(', ')}` : ''} — กดเรียงร้านใกล้ฉัน ดูชื่อเมนู ราคาจากร้าน แล้วสั่งได้เลย`)
   : (en
       ? `${nf(total)} shops on TripDeDee with ${label} on their menu${nProvinces ? ` in ${nf(nProvinces)} provinces` : ''}. Pick a province to see shops, menu items and prices.`
-      : `รวม ${nf(total)} ร้านที่มีเมนู${label}บน TripDeDee${nProvinces ? ` ใน ${nf(nProvinces)} จังหวัด` : ''} — เลือกจังหวัดเพื่อดูร้าน ชื่อเมนู และราคา`);
+      : `หาร้าน${label}ใกล้ฉัน ${nf(total)} ร้านบน TripDeDee${nProvinces ? ` ใน ${nf(nProvinces)} จังหวัด` : ''} — กดเรียงร้านใกล้ฉัน หรือเลือกจังหวัด ดูชื่อเมนูและราคา`);
 
 const crumbs = [
   { name: en ? 'All shops' : 'ทุกร้าน', url: SITE + (en ? '/shop/' : '/shop/') },
@@ -125,7 +125,7 @@ const jsonLd = {
   </div>
   <p class="mb-5 text-sm leading-relaxed text-gray-600">{description}</p>
 
-  {province && shops.some((s) => s.lat != null) && (
+  {shops.some((s) => s.lat != null) && (
     /* เรียงร้านใกล้ฉัน (8 พ.ย. 2569) · ขอตำแหน่งตอนกดเท่านั้น · วัดระยะบนเครื่อง ไม่ส่งตำแหน่งไปไหน · ร้านไม่มีพิกัดไปอยู่ท้าย */
     <div id="nearbar" class="mb-5 flex flex-wrap items-center gap-3 rounded-2xl bg-gradient-to-r from-orange-500 to-[#e2641c] p-4 text-white shadow-md">
       <div class="min-w-0 flex-1">

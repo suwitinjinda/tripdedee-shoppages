@@ -4,7 +4,8 @@
 // because each province gets its own indexable URL with a dedicated title.
 import DirectoryLayout from '../../layouts/DirectoryLayout.astro';
 import ShopCard from '../../components/ShopCard.astro';
-import { searchShops, getShopFacets } from '../../lib/api.js';
+import { searchShops, getShopFacets, getFoodDishes } from '../../lib/api.js';
+import { foodHref } from '../../lib/food.js';
 import { typeLabel } from '../../lib/shopType.js';
 
 const provinceRaw = decodeURIComponent(Astro.params.province || '').slice(0, 50).trim();
@@ -16,10 +17,16 @@ const offset = Math.max(0, parseInt(Astro.url.searchParams.get('offset') || '0',
 const shopType = String(Astro.url.searchParams.get('shopType') || '').slice(0, 50).trim();
 const limit = 24;
 
-const [results, facets] = await Promise.all([
+const [results, facets, food] = await Promise.all([
   searchShops({ province: provinceRaw, shopType, limit, offset }),
   getShopFacets(),
+  getFoodDishes().catch(() => ({ dishes: [] })),
 ]);
+/* เมนูในจังหวัดนี้ที่มีหน้าของตัวเอง (ถึงเกณฑ์) · เรียงจากร้านเยอะไปน้อย (8 พ.ย. 2569) */
+const dishesHere = (food.dishes || [])
+  .map((d) => ({ d, hit: (d.provinces || []).find((p) => p.province === provinceRaw) }))
+  .filter((x) => x.hit)
+  .sort((a, b) => b.hit.count - a.hit.count);
 
 if (results.total === 0 && offset === 0) {
   Astro.response.status = 404;
@@ -28,11 +35,12 @@ if (results.total === 0 && offset === 0) {
 const heading = shopType
   ? `${typeLabel({ shopType }, 'th')} ใน ${provinceRaw}`
   : `ร้านในจังหวัด${provinceRaw}`;
-const title = `${heading} | TripDeDee`;
+/* 8 พ.ย. 2569 · คนค้น "ร้านอาหารใกล้ฉัน" "ร้านใกล้ฉัน" · หน้าจังหวัดคือหน้าที่ Google ใช้ตอบคำกว้าง ชื่อเดิมไม่มีคำว่าใกล้ */
+const title = shopType ? `${heading}ใกล้ฉัน | TripDeDee` : `ร้านอาหารใกล้ฉัน ใน${provinceRaw} · ร้านค้า เมนู ราคา | TripDeDee`;
 // ไม่ใส่จำนวนร้าน (27 ต.ค. 2569) · ยอดจาก /shop/search กับ /shop/facets รวมหมุดที่นำเข้าจาก
 // แผนที่สาธารณะ (importSource) ด้วย ตอนตรวจภูเก็ต 484 ร้าน เป็นหมุดนำเข้า 427 · ทั้งประเทศ 5,466 จาก 8,283
 // หลังบ้านไม่มียอดร้านจริงแยกให้ จึงเอาตัวเลขออกแทนการเดา · AI จะได้ไม่อ้างตัวเลขที่เป่าเกินจริง
-const description = `${shopType ? typeLabel({ shopType }, 'th') : 'ร้าน'}ในจังหวัด${provinceRaw} — เมนู ราคา ที่ตั้ง รีวิว`;
+const description = `หา${shopType ? typeLabel({ shopType }, 'th') : 'ร้านอาหาร ร้านค้า'}ใกล้ฉันในจังหวัด${provinceRaw} — เมนู ราคา ที่ตั้ง รีวิว${dishesHere.length ? ` · ${dishesHere.slice(0, 4).map((x) => x.d.th).join(' ')}` : ''} · กดหาร้านใกล้ตำแหน่งคุณได้`;
 const canonical = `https://tripdedee.com/shop/area/${encodeURIComponent(provinceRaw)}${shopType ? '?shopType=' + encodeURIComponent(shopType) : ''}`;
 
 const nextOffset = offset + limit;
@@ -75,9 +83,37 @@ const jsonLd = {
     <span class="text-gray-700">{provinceRaw}</span>
   </nav>
 
-  <div class="mb-6 flex flex-wrap items-baseline gap-3">
+  <div class="mb-4 flex flex-wrap items-baseline gap-3">
     <h1 class="text-2xl font-extrabold text-gray-900">{heading}</h1>
   </div>
+
+  {/* ร้านใกล้ฉันตอนนี้ (8 พ.ย. 2569) · ไปหน้า /f/near ที่หาร้านจริงในแอปตามตำแหน่ง (ไม่รวมหมุดนำเข้า) */}
+  {offset === 0 && (
+    <a href="https://tripdedee.com/f/near?src=area" class="mb-4 flex items-center gap-3 rounded-2xl bg-gradient-to-r from-orange-500 to-[#e2641c] p-4 text-white shadow-md">
+      <span class="text-2xl">📍</span>
+      <span class="min-w-0 flex-1">
+        <span class="block text-base font-extrabold leading-snug">หาร้านอาหารใกล้ฉันตอนนี้</span>
+        <span class="block text-xs text-white/90">เรียงร้านในแอป TripDeDee ตามระยะจากตำแหน่งคุณ · ดูเมนูแล้วสั่งได้เลย</span>
+      </span>
+      <span class="shrink-0 rounded-xl bg-white px-4 py-2 text-sm font-extrabold text-[#c2410c]">เปิด</span>
+    </a>
+  )}
+
+  {offset === 0 && !shopType && dishesHere.length > 0 && (
+    <section class="mb-5" aria-label={`เมนูใน${provinceRaw}`}>
+      <h2 class="mb-2 text-base font-bold text-gray-900">กินอะไรดีใน{provinceRaw}</h2>
+      <ul class="flex flex-wrap gap-2">
+        {dishesHere.map(({ d, hit }) => (
+          <li>
+            <a href={foodHref('th', d.slug, provinceRaw)} class="inline-block rounded-full border border-orange-200 bg-orange-50 px-3 py-1.5 text-sm text-orange-700 hover:border-orange-400">
+              ร้าน{d.th}ใกล้ฉัน <span class="text-orange-400">({hit.count})</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+      <p class="mt-3 text-sm"><a href={`https://tripdedee.com/f/t?province=${encodeURIComponent(provinceRaw)}&src=area`} class="text-blue-600 underline">🗺 ร้านอร่อยรอบที่เที่ยวใน{provinceRaw}</a></p>
+    </section>
+  )}
 
   {/* shopType filter within this province */}
   {facets.shopTypes.length > 0 && (
