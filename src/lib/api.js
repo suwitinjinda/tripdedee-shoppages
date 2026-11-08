@@ -166,3 +166,10 @@ export async function getShopDishes(shopKey) {
   if (!json || json.notFound || json.success === false) return [];
   return Array.isArray(json.data) ? json.data : [];
 }
+
+/** หน้า /f/t (ร้านใกล้ที่เที่ยว) ที่ควรอยู่ใน sitemap (8 พ.ย. 2569) · { provinces: [], attractions: [] } */
+export async function getTravelIndex() {
+  const json = await getCached('/tourist-attractions/web-index');
+  if (!json || json.success === false || !json.data) return { provinces: [], attractions: [] };
+  return { provinces: json.data.provinces || [], attractions: json.data.attractions || [] };
+}

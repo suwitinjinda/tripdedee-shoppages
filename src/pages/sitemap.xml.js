@@ -1,4 +1,4 @@
-import { getActiveShops, getFoodDishes } from '../lib/api.js';
+import { getActiveShops, getFoodDishes, getTravelIndex } from '../lib/api.js';
 import { foodHref } from '../lib/food.js';
 import { shopHref } from '../lib/slug.js';
 
@@ -36,6 +36,17 @@ export async function GET() {
       }
     }
   } catch (_) { /* ไม่ให้หน้าเมนูล้มทั้ง sitemap */ }
+
+  // หน้าจังหวัด /shop/area/<จังหวัด> + ร้านใกล้ที่เที่ยว /f/t (8 พ.ย. 2569) · เดิมไม่อยู่ใน sitemap ไหนเลย
+  // จังหวัด = มีหน้าเมนู หรือมีหน้าที่เที่ยวที่ถึงเกณฑ์ · /f/t เอาเฉพาะหน้าที่ไม่ noindex (หลังบ้านตัดให้)
+  try {
+    const [{ dishes }, travel] = await Promise.all([getFoodDishes().catch(() => ({ dishes: [] })), getTravelIndex()]);
+    const provs = new Set(travel.provinces);
+    for (const d of dishes || []) for (const p of d.provinces || []) provs.add(p.province);
+    for (const p of provs) locs.push(`${SITE}/shop/area/${encodeURIComponent(p)}`);
+    for (const p of travel.provinces) locs.push(`${SITE}/f/t?province=${encodeURIComponent(p)}`.replace(/&/g, '&amp;'));
+    for (const id of travel.attractions) locs.push(`${SITE}/f/t/${encodeURIComponent(id)}`);
+  } catch (_) { /* ไม่ให้ทั้ง sitemap ล้ม */ }
 
   const body =
     '<?xml version="1.0" encoding="UTF-8"?>\n' +

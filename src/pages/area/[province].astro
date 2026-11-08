@@ -36,7 +36,7 @@ const heading = shopType
   ? `${typeLabel({ shopType }, 'th')} ใน ${provinceRaw}`
   : `ร้านในจังหวัด${provinceRaw}`;
 /* 8 พ.ย. 2569 · คนค้น "ร้านอาหารใกล้ฉัน" "ร้านใกล้ฉัน" · หน้าจังหวัดคือหน้าที่ Google ใช้ตอบคำกว้าง ชื่อเดิมไม่มีคำว่าใกล้ */
-const title = shopType ? `${heading}ใกล้ฉัน | TripDeDee` : `ร้านอาหารใกล้ฉัน ใน${provinceRaw} · ร้านค้า เมนู ราคา | TripDeDee`;
+const title = shopType ? `${typeLabel({ shopType }, 'th')}ใกล้ฉัน ใน${provinceRaw} | TripDeDee` : `ร้านอาหารใกล้ฉัน ใน${provinceRaw} · ร้านค้า เมนู ราคา | TripDeDee`;
 // ไม่ใส่จำนวนร้าน (27 ต.ค. 2569) · ยอดจาก /shop/search กับ /shop/facets รวมหมุดที่นำเข้าจาก
 // แผนที่สาธารณะ (importSource) ด้วย ตอนตรวจภูเก็ต 484 ร้าน เป็นหมุดนำเข้า 427 · ทั้งประเทศ 5,466 จาก 8,283
 // หลังบ้านไม่มียอดร้านจริงแยกให้ จึงเอาตัวเลขออกแทนการเดา · AI จะได้ไม่อ้างตัวเลขที่เป่าเกินจริง

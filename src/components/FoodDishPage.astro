@@ -125,7 +125,7 @@ const jsonLd = {
   </div>
   <p class="mb-5 text-sm leading-relaxed text-gray-600">{description}</p>
 
-  {shops.some((s) => s.lat != null) && (
+  {(page.near || []).length > 0 && (
     /* เรียงร้านใกล้ฉัน (8 พ.ย. 2569) · ขอตำแหน่งตอนกดเท่านั้น · วัดระยะบนเครื่อง ไม่ส่งตำแหน่งไปไหน · ร้านไม่มีพิกัดไปอยู่ท้าย */
     <div id="nearbar" class="mb-5 flex flex-wrap items-center gap-3 rounded-2xl bg-gradient-to-r from-orange-500 to-[#e2641c] p-4 text-white shadow-md">
       <div class="min-w-0 flex-1">
@@ -137,6 +137,11 @@ const jsonLd = {
       </button>
     </div>
   )}
+  {/* ร้านใกล้คุณที่สุดจากทุกร้านของหน้านี้ (ไม่ใช่แค่ที่แสดง) · เติมด้วยสคริปต์ตอนกดปุ่ม */}
+  <section id="nearest" class="mb-5 hidden rounded-2xl border border-orange-200 bg-orange-50 p-4" aria-live="polite">
+    <h2 class="mb-2 text-base font-extrabold text-gray-900">{en ? `Nearest ${label} to you` : `ร้าน${label}ใกล้คุณที่สุด`}</h2>
+    <ol id="nearestlist" class="space-y-2"></ol>
+  </section>
 
   {!province && provinces.length > 0 && (
     <section class="mb-6" aria-label={en ? 'By province' : 'เลือกจังหวัด'}>
@@ -269,6 +274,7 @@ const jsonLd = {
   <p class="mt-8 text-center text-sm">
     <a href={alternateUrl.replace(SITE, '')} class="text-gray-500 underline">{en ? 'ภาษาไทย' : 'English'}</a>
   </p>
+  <script type="application/json" id="neardata" set:html={JSON.stringify(page.near || []).replace(/</g, '\\u003c')}></script>
   <script is:inline define:vars={{ en }}>
     (function () {
       var btn = document.getElementById('nearbtn'); var msg = document.getElementById('nearmsg'); var list = document.getElementById('shoplist');
@@ -283,10 +289,31 @@ const jsonLd = {
           rows.forEach(function (r) { var a = parseFloat(r.dataset.lat), b = parseFloat(r.dataset.lng); r._d = isFinite(a) && isFinite(b) ? km(la, lo, a, b) : Infinity;
             var d = r.querySelector('.dist'); if (d && isFinite(r._d)) { d.textContent = (en ? '📍 ' + r._d.toFixed(1) + ' km from you' : '📍 ห่างจากคุณ ' + r._d.toFixed(1) + ' กม.'); d.classList.remove('hidden'); } });
           rows.sort(function (x, y) { return x._d - y._d; }).forEach(function (r) { list.appendChild(r); });
-          var n = rows.filter(function (r) { return isFinite(r._d); });
-          msg.textContent = n.length ? (en ? 'Sorted · nearest ' + n[0]._d.toFixed(1) + ' km' : 'เรียงแล้ว · ใกล้สุด ' + n[0]._d.toFixed(1) + ' กม.') : (en ? 'No shop locations to compare' : 'ร้านในหน้านี้ไม่มีพิกัด');
+          /* ใกล้สุด 5 ร้านจากทุกร้านของหน้านี้ */
+          try {
+            var all = JSON.parse((document.getElementById('neardata') || {}).textContent || '[]');
+            all.forEach(function (x) { x._d = km(la, lo, x.lat, x.lng); });
+            all.sort(function (x, y) { return x._d - y._d; });
+            var box = document.getElementById('nearest'), ol = document.getElementById('nearestlist');
+            if (box && ol && all.length) {
+              ol.textContent = '';
+              all.slice(0, 5).forEach(function (x) {
+                var li = document.createElement('li'); var a = document.createElement('a');
+                a.href = x.c ? 'https://tripdedee.com/f/' + encodeURIComponent(x.c) + '?src=food-near' : (x.slug ? (en ? '/shop/en/' : '/shop/') + encodeURIComponent(x.slug) : '#');
+                a.className = 'flex items-center justify-between gap-3 rounded-xl bg-white px-3 py-2.5 shadow-sm';
+                var t = document.createElement('span'); t.className = 'min-w-0'; var nm = document.createElement('span'); nm.className = 'block truncate text-[15px] font-bold text-gray-900'; nm.textContent = (en && x.e) ? x.e : x.n;
+                var ar = document.createElement('span'); ar.className = 'block truncate text-xs text-gray-500'; ar.textContent = [x.d, x.p].filter(Boolean).join(', ');
+                t.appendChild(nm); t.appendChild(ar);
+                var k = document.createElement('span'); k.className = 'shrink-0 text-sm font-extrabold text-orange-600'; k.textContent = x._d.toFixed(1) + (en ? ' km' : ' กม.');
+                a.appendChild(t); a.appendChild(k); li.appendChild(a); ol.appendChild(li);
+              });
+              box.classList.remove('hidden');
+            }
+          } catch (e) {}
+          var near0 = document.querySelector('#nearestlist li span.text-orange-600');
+          msg.textContent = near0 ? (en ? 'Nearest ' + near0.textContent + ' · list below sorted by distance' : 'ใกล้สุด ' + near0.textContent + ' · รายการด้านล่างเรียงตามระยะแล้ว') : (en ? 'No shop locations to compare' : 'ร้านในหน้านี้ไม่มีพิกัด');
           btn.disabled = false; btn.textContent = en ? 'Re-sort' : 'เรียงใหม่';
-          list.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          (document.getElementById('nearest') || list).scrollIntoView({ behavior: 'smooth', block: 'start' });
         }, function () { btn.disabled = false; msg.textContent = en ? 'Allow location to sort by distance' : 'ต้องอนุญาตให้ใช้ตำแหน่งก่อน ถึงจะเรียงตามระยะได้'; },
         { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 });
       });
