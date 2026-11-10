@@ -62,6 +62,9 @@ export function extractShopId(param) {
 // เดิมใช้ extractShopId ซึ่งรู้จักแค่ ObjectId · /hotel/890103 เด้งไป /hotel/<ชื่อ>-890103 แล้วหน้านั้น 404
 // (ที่พักที่มีเจ้าของจริงทั้ง 6 แห่งมี hotelId จึงโดนทุกแห่ง)
 export function extractHotelId(param) {
+  /* รหัสยาวแบบ hotel-<เวลา>-<สุ่ม> มีขีดในตัว (10 พ.ย. 2569) · เดิมตัดเอาแค่ท้ายสุด → ไม่พบที่พัก ทุกลิงก์ที่ redirect มา */
+  const long = String(param || '').match(/(hotel-\d{10,}-[a-z0-9]+)$/i);
+  if (long) return long[1];
   const id = extractShopId(param);
   if (id !== String(param || '')) return id;
   const tail = String(param || '').split('-').pop() || '';
