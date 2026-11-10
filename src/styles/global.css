@@ -1,5 +1,24 @@
 @import "tailwindcss";
 
+/* สีแบรนด์เดียวกับหน้าแรก tripdedee.com (9 พ.ย. 2569 · ตรวจดีไซน์)
+   หน้าร้าน/ค้นหาเดิมใช้ส้ม-ชมพู ส่วนหน้าแรก/เปิดร้าน/ไรเดอร์ใช้น้ำเงิน = ดูเป็นสองแบรนด์
+   ส้มในหน้าเหล่านี้ใช้เป็นสีเน้นของแบรนด์อย่างเดียว (ไม่ได้แปลว่าเตือน/ปิด) จึงแทนทั้งชุดที่นี่ที่เดียว */
+@theme {
+  --color-orange-50: #EDF3FF;
+  --color-orange-100: #DBE7FF;
+  --color-orange-200: #BCD3FB;
+  --color-orange-300: #8DB4F5;
+  --color-orange-400: #3F7EE6;
+  --color-orange-500: #0B5CD5;
+  --color-orange-600: #0A4FB8;
+  --color-orange-700: #08429A;
+  --color-orange-800: #07357C;
+  --color-orange-900: #07306C;
+  --color-orange-950: #051F47;
+  --color-rose-50: #EDF3FF;
+  --color-rose-500: #07306C;
+}
+
 :root {
   --brand: #f97316;
   --brand-dark: #ea580c;
@@ -8,7 +27,7 @@
 }
 
 html {
-  font-family: "Noto Sans Thai", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: "Anuphan", "Noto Sans Thai", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   scroll-behavior: smooth;
 }
 
